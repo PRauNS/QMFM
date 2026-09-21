@@ -10,14 +10,14 @@ QMFM is a finite volume code for studying magnetothermal evolution in neutron st
   <tr>
     <th width="50%">
         <figure>
-          <img src="https://raw.githubusercontent.com/QMFM/extra/BannerMagTherm.png">
+          <img src="https://github.com/PRauNS/QMFM/tree/main/extra/BannerMagTherm.png">
           <figcaption>Magnetothermal evolution</figcaption>
         </figure>
       </a>
     </th>
     <th width="50%">
         <figure>
-          <img src="https://raw.githubusercontent.com/QMFM/extra/BannerCurrent.png">
+          <img src="https://github.com/PRauNS/QMFM/tree/main/extra/BannerCurrent.png">
           <figcaption>Current density</figcaption>
         </figure>
       </a>
@@ -57,7 +57,7 @@ After installation, the code is run using
 ```
 from the QMFM directory. The options for running simulations are specified within the SimSetup.in file; the options are described by comments in this file. Note that adding additional entries to this file that are not preceded by hashmarks, indicating a comment, will likely cause the code to crash.
 
-The only compatible equation of state options at present are the BSk24 (<https://doi.org/10.1093/mnras/stz800>) and SLy4 (<https://www.aanda.org/articles/aa/abs/2001/46/aa1755/aa1755.html>); data files for a 1.4 solar mass model for each are included in the repo. These are loaded using the options
+The only compatible equation of state options at present are [BSk24](https://doi.org/10.1093/mnras/stz800) and [SLy4](10.1051/0004-6361:20011402); data files for a 1.4 solar mass model for each are included in the repo. These are loaded using the options
 
 CrustEOS: TOVBSk24Crust.dat
 CoreEOS: TOVBSk24Core.dat
@@ -69,11 +69,11 @@ CoreEOS: TOVSLy4Core.dat
 
 respectively.
 
-The initial magnetic field at present only of the form described in; the strength of its poloidal and toroidal components is specified (in G) by options (e.g., for a 10^14 G poloidal field at the poles and a 10^14 G maximum toroidal field)
+The initial magnetic field at present only of the form described in; the strength of its poloidal and toroidal components is specified (in G) by options (e.g., for a 10<sup>14</sup> G poloidal field at the poles and a 10<sup>14</sup> G maximum toroidal field)
 
 B_pol_init: 1e14
 B_tor_init: 1e14
 
 #Developers
 
-Peter B. Rau <https://github.com/PRauNS>
+[Peter B. Rau (@PBRauNS)](https://github.com/PRauNS)
