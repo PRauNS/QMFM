@@ -26,7 +26,7 @@ QMFM is a finite volume code for studying magnetothermal evolution in neutron st
   <tr>
 </table>
 
-#Installation instructions and requirements
+## Installation instructions and requirements
 
 QMFM requires the following external libraries:
 
@@ -49,7 +49,7 @@ make
 
 which will clone the repo and generate the executable "main" in the folder "QMFM". An example CMake file (CMakeLists.txt) is included; it may need to be adjusted based on where the above libraries are installed on the user's system.
 
-#Running the code
+## Running the code
 
 After installation, the code is run using
 ```terminal
@@ -60,11 +60,13 @@ from the QMFM directory. The options for running simulations are specified withi
 The only compatible equation of state options at present are [BSk24](https://doi.org/10.1093/mnras/stz800) and [SLy4](10.1051/0004-6361:20011402); data files for a 1.4 solar mass model for each are included in the repo. These are loaded using the options
 
 CrustEOS: TOVBSk24Crust.dat
+
 CoreEOS: TOVBSk24Core.dat
 
 or 
 
 CrustEOS: TOVSLy4Crust.dat
+
 CoreEOS: TOVSLy4Core.dat
 
 respectively.
@@ -72,8 +74,9 @@ respectively.
 The initial magnetic field at present only of the form described in; the strength of its poloidal and toroidal components is specified (in G) by options (e.g., for a 10<sup>14</sup> G poloidal field at the poles and a 10<sup>14</sup> G maximum toroidal field)
 
 B_pol_init: 1e14
+
 B_tor_init: 1e14
 
-#Developers
+## Developers
 
 [Peter B. Rau (@PBRauNS)](https://github.com/PRauNS)
