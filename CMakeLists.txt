@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 4.1)
-project(ElectronMHDAxisymmetricSpherical)
+cmake_minimum_required(VERSION 3.26)
+project(QMFM)
 
 # --------------------------------------------------
 # Compiler settings
