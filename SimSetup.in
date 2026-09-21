@@ -1,0 +1,111 @@
+# File name for output H5 file (excluding file extension)
+OutputFile: EMHD_Sim_Data_1e14
+
+# File name for crust EOS data table and for core EOS data table
+CrustEOS: TOVBSk24Crust.dat
+CoreEOS: TOVBSk24Core.dat
+
+# Timestep method (SSP2, SSP3, IMEX-SSP2)
+Timestep_method: IMEX-SSP2
+
+# true for varying cell-center spacing in radial direction or false otherwise. Defaults to false if unspecified.
+varying_mesh: false
+
+# Resolution in radial direction and in polar angle direction
+Nr: 30
+Ntheta: 40
+
+# Lower and upper limits of simulation domain in r-direction in cm
+r_min: 11.5451e5
+r_max: 12.3970e5
+
+# Lower and upper limits of simulation domain in theta direction in degrees
+theta_min: 0
+theta_max: 180
+
+# Maximum time in years
+t_max: 1e4
+
+# Courant number for magnetic evolution and thermal evolution. Can make the latter >> 1 if using an IMEX timestepping method, but if it is too large
+# unphysical thermal equilibrium can be reached.
+k_CB: 0.2
+k_CT: 2000
+
+# cutoff (energy) density in g/cm^3 (lowest density to include in simulation domain)
+rho_cutoff: 1.5e10
+
+# Maximum number of snapshots to save to H5 file
+saves_number: 2000
+
+# Cadence (number of timesteps) to print energy conservation information to terminal.
+ECons_cadence: 100
+
+# Print out divB calculation every ECons_cadence timesteps (on/off = true/false)
+divBCheck: false
+
+# Initial poloidal field strength (at poles) and toroidal field strength (maximum), specified by magnitude B_pol_init and B_tor_init (in G)
+B_pol_init: 1e14
+B_tor_init: 0
+
+# Whether initial magnetic field is equatorially symmetric (true) or not (false)
+InitiallyEquatoriallySymmetric: true
+
+# Initial redshifted temperature profile value (max value if non-uniform) in K
+T_init: 5e9
+
+# true for uniform initial redshifted temperature profile, false for radially-varying temperature profile. Defaults to true if unspecified.
+uniform_T: true
+
+# true for fixed redshifted temperature, false for time-varying redshifted temperature. Defaults to false if unspecified. Can also turn off Joule heating term in heat equation by setting JouleHeating = false
+# and turn in-medium corrections to core MUrca neutrino emissivity on/off (true/false)
+fixed_T: false
+JouleHeating: true
+InMediumMUrca: true
+
+# Landau quantization terms in magnetization and conductivities on/off (true/false). Also includes B-dependence in specific heat capacity of crust.
+quantization: true
+
+# anisotropic (B-dependent) electrical and thermal conductivity on/off (true/false)
+conductivity_anisotropy: true
+
+# general relativistic metric factors on/off (true/false)
+GR: true
+
+# superfluidity turned on (true) or off (false). In crust, just affects neutron specific heat capacity; in core, affects heat capacity and neutrino emissivity)
+SF: true
+
+# superfluid gap models. Only used if SF = "true". Options are: SF_n_crust = "SFB" or "Ho2012"; SF_p_core = "CCDK" or "Ho2012"; SF_n_core = "TToa", "SYHHP" or "EEHOr"
+SF_n_crust: SFB
+SF_p_core: CCDK
+SF_n_core: TToa
+
+# Lower boundary conditions on perpendicular magnetic field i.e., Br ("perfect_conducting" = 0 or "continuous") and parallel magnetic field i.e., Btheta and Bphi ("perfect_conducting" = continuous or "zero" = 0)
+B_perp_lower: perfect_conducting
+B_parallel_lower: perfect_conducting
+
+# Lower boundary conditions on perpendicular electric field i.e., Er ("perfect_conducting" = continuous) and parallel electric field i.e., Etheta and Ephi ("perfect_conducting" = 0 or "continuous")
+E_perp_lower: perfect_conducting
+E_parallel_lower: perfect_conducting
+
+# Upper boundary condition on poloidal field i.e., Br and Btheta ("vacuum") and toroidal field i.e., Bphi ("vacuum" = 0)
+B_pol_upper: vacuum
+B_tor_upper: vacuum
+
+# Upper boundary conditions on perpendicular electric field i.e., Er ("vacuum" = 0 or "continuous") and parallel electric field i.e., Etheta and Ephi ("vacuum" = 0 or "continuous")
+E_perp_upper: vacuum
+E_parallel_upper: vacuum
+
+# Lower boundary conditions on temperature ("fake_core")
+T_lower: fake_core
+
+# Upper boundary conditions on temperature ("non-magnetic_G83" (Gudmundsson+1983), "non-magnetic_P01" (Potekhin+2001), "magnetic_P01" (Potekhin+2001) or "magnetic_P15" (Potekhin+2015), in reference to envelope model used)
+T_upper: magnetic_P15
+
+# Impurity parameter in conductivity ("zero" or "Carreau2020BSk24" or "Vigano2013Q100")
+Z_impurity: Carreau2020BSk24
+
+# Toroidal magnetic field evolution hyperdiffusivity dimensionless prefactor <1 (and usually <~0.1).
+C_hyp: 0.01
+
+# Suppress quantization effects along polar axis on/off (true/false). Defaults to true. Sometimes necessary for numerical stability with high resolution. If "quantization=false" above, this option is irrelevant.
+PolarAxisQuantization: true
