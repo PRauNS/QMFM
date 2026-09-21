@@ -10,14 +10,14 @@ QMFM is a finite volume code for studying magnetothermal evolution in neutron st
   <tr>
     <th width="50%">
         <figure>
-          <img src="https://github.com/PRauNS/QMFM/tree/main/extra/BannerMagTherm.png">
+          <img src="extra/BannerMagTherm.png">
           <figcaption>Magnetothermal evolution</figcaption>
         </figure>
       </a>
     </th>
     <th width="50%">
         <figure>
-          <img src="https://github.com/PRauNS/QMFM/tree/main/extra/BannerCurrent.png">
+          <img src="extra/BannerCurrent.png">
           <figcaption>Current density</figcaption>
         </figure>
       </a>
@@ -38,7 +38,6 @@ QMFM requires the following external libraries:
 * HDF5: <https://github.com/HDFGroup/hdf5/releases>
 
 To install QMFM, in terminal run
-
 ```terminal
 git clone https://github.com/PRauNS/QMFM.git
 mkdir build-dir
@@ -46,7 +45,6 @@ cd build-dir
 cmake ..
 make
 ```
-
 which will clone the repo and generate the executable "main" in the folder "QMFM". An example CMake file (CMakeLists.txt) is included; it may need to be adjusted based on where the above libraries are installed on the user's system.
 
 ## Running the code
@@ -58,24 +56,23 @@ After installation, the code is run using
 from the QMFM directory. The options for running simulations are specified within the SimSetup.in file; the options are described by comments in this file. Note that adding additional entries to this file that are not preceded by hashmarks, indicating a comment, will likely cause the code to crash.
 
 The only compatible equation of state options at present are [BSk24](https://doi.org/10.1093/mnras/stz800) and [SLy4](10.1051/0004-6361:20011402); data files for a 1.4 solar mass model for each are included in the repo. These are loaded using the options
-
+```
 CrustEOS: TOVBSk24Crust.dat
-
 CoreEOS: TOVBSk24Core.dat
-
+```
 or 
-
+```
 CrustEOS: TOVSLy4Crust.dat
-
 CoreEOS: TOVSLy4Core.dat
-
+```
 respectively.
 
-The initial magnetic field at present only of the form described in; the strength of its poloidal and toroidal components is specified (in G) by options (e.g., for a 10<sup>14</sup> G poloidal field at the poles and a 10<sup>14</sup> G maximum toroidal field)
-
+The initial magnetic field at present only of the form described in; the strength of its poloidal and toroidal components is specified (in G) by options 
+```
 B_pol_init: 1e14
-
 B_tor_init: 1e14
+```
+e.g., for a 10<sup>14</sup> G poloidal field at the poles and a 10<sup>14</sup> G maximum toroidal field)
 
 ## Developers
 
