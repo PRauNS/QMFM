@@ -4,7 +4,7 @@
 </h1>
 
 <!-- Description -->
-QMFM is a finite volume code for studying magnetothermal evolution in neutron star crusts, and includes the effects of Landau quantization on thermodynamic quantities and transport coefficients. It is written in C++ and parallelized with MPI.
+QMFM is a finite volume code for studying magnetothermal evolution in neutron star crusts, and includes the effects of Landau quantization on thermodynamic quantities and transport coefficients. It is written in C++ and parallelized with MPI. The code was introduced, and is described in further detail, in [this paper](https://arxiv.org/abs/2609.24918).
 
 <table style="background-color:#FFFFFF;">
   <tr>
