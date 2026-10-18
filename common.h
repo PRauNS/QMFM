@@ -1,11 +1,6 @@
 #ifndef COMMON_H_INCLUDED
 #define COMMON_H_INCLUDED
 
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <iomanip>
-
 #include <gsl/gsl_spline.h>
 #include <gsl/gsl_interp.h>
 
@@ -103,12 +98,13 @@ struct SimParams {
 
 struct BParams {
 
+    std::string B_field_type = "crust-confined"; //Whether to use a crust-confined or core-threaded magnetic field. Defaults to a crust-confined field
     double B_pol_init = 1., B_tor_init = 0.5; //initial magnitude of poloidal and toroidal fields in reduced units.
     std::string B_perp_lower, B_parallel_lower, B_pol_upper, B_tor_upper; //boundary conditions for the magnetic field
     std::string E_perp_lower, E_parallel_lower, E_perp_upper, E_parallel_upper; //lower boundary conditions for electric field
     bool quantization = false; //Whether to include Landau quantization effects (true) or not (false). Defaults to false if unspecified.
     std::string Z_impurity = "zero"; //form of impurities to include. Currently implement three models: "zero" (Q=0, no impurities, default), "Vigano2013Q100" (Q modeled after impurity parameter used in Vigano 2013, PhD thesis, University of Alacant, Spain) or "Carreau2020BSk24" (Q for BSk24 equation of state from Carreau et al. A&A, A77 (2020))
-    bool PolarAxisQuantization = true; //Whether to include Landau quantization effects in current at polar axis (true) or not (false). Defaults to true if unspecified.
+    bool SuppressPolarAxisQuantization = false; //Whether to suppress Landau quantization effects in current along polar axis (true) or not (false). Defaults to false if unspecified
 
 };
 
@@ -142,9 +138,11 @@ struct TParams {
 struct ConductParams {
 
     std::string EOS; //which EOS is being used. Filled in "load_EOS" function
-    std::string EorT = "both"; //whether to conduct electrical conductivity parameters ("Electrical"), thermal conductivity parameters ("Thermal"), or both ("Both", default)
+    std::string EorT = "both"; //whether to compute electrical conductivity parameters ("Electrical"), thermal conductivity parameters ("Thermal"), or both ("Both", default)
     bool quantization = false; //Whether to include Landau quantization effects (true) or not (false). Defaults to false if unspecified.
-    std::string Z_impurity = "zero"; //form of impurities to include. Currently implement two models: "zero" (Q=0, no impurities, default) or "Vigano2013" (Q modeled after impurity parameter used in Vigano 2013, PhD thesis, University of Alacant, Spain).
+    //form of impurities to include. Currently implement three models: "zero" (Q=0, no impurities, default), "Vigano2013" (Q modeled after impurity parameter used in Vigano 2013, PhD thesis, University of Alacant, Spain),
+    //or "Carreau2020BSk24" (Q for BSk24 equation of state from Carreau, Fantina and Gulminelli A&A 640, A77 (2020))
+    std::string Z_impurity = "zero";
     double n_b_nd = 1e-3; //neutron drip baryon number density in fm^-3. Default to 1e-3 fm^-3 (too high, set correctly based on EOS table in main)
 
 };
@@ -271,8 +269,8 @@ struct MagCoeffs {
     size_t Nr, Nth;
     bool quantization_In; //input variable for magnetization boolean
     bool quantization; //permanent variable for magnetization boolean
-    bool PolarAxisQuantization_In; //input variable for polar axis quantization boolean
-    bool PolarAxisQuantization; //permanent variable for polar axis quantization boolean
+    bool SuppressPolarAxisQuantization_In; //input variable for polar axis quantization suppression boolean
+    bool SuppressPolarAxisQuantization; //permanent variable for polar axis quantization suppression boolean
 
     ScalarField Bmag; //magnetic field magnitude (reduced units)
     ScalarField vtheta_phi_lb_Lag;
@@ -291,13 +289,12 @@ struct MagCoeffs {
     ScalarField C_m; //magnetocaloric coefficient (reduced units)
     RadialScalarField mu_e; //electron chemical potential (MeV)
 
-    MagCoeffs(size_t Nr, size_t Nth, bool quantization_In, bool PolarAxisQuantization_In) :
+    MagCoeffs(size_t Nr, size_t Nth, bool quantization_In, bool SuppressPolarAxisQuantization_In) :
         Bmag(boost::extents[Nr][Nth]), //magnitude of magnetic field in reduced units
         vtheta_phi_lb_Lag(boost::extents[Nr][Nth]), //magnitude of magnetic field in reduced units
         vtheta_phi_lt_Lag(boost::extents[Nr][Nth]), //magnitude of magnetic field in reduced units
         vtheta_phi_rb_Lag(boost::extents[Nr][Nth]), //magnitude of magnetic field in reduced units
         vtheta_phi_rt_Lag(boost::extents[Nr][Nth]), //magnitude of magnetic field in reduced units
-//        Bhat(boost::extents[3][Nr][Nth]), //magnetic field unit vector at cell centers (location of B_phi)
         rBhat(boost::extents[3][Nr][Nth]), //magnetic field unit vector at location of J_r
         thBhat(boost::extents[3][Nr][Nth]), //magnetic field unit vector at location of J_theta
         phBhat(boost::extents[3][Nr][Nth]), //magnetic field unit vector at location of J_phi
@@ -311,7 +308,7 @@ struct MagCoeffs {
         mu_e(boost::extents[Nr]) //electron chemical potential in MeV
     {
         quantization = quantization_In;
-        PolarAxisQuantization = PolarAxisQuantization_In;
+        SuppressPolarAxisQuantization = SuppressPolarAxisQuantization_In;
         if(quantization == false){
             //resize magnetization and its derivatives to zero if unused
             J_B.resize(boost::extents[0][0][0]);
@@ -363,10 +360,8 @@ void exchng2Vector(VectorField & A, size_t N_GC, const Process & process, MPI_Da
 void exchng2Scalar(ScalarField & A, size_t N_GC, const Process & process, MPI_Datatype stridetype);
 void exchng2Array(std::vector<double> & A, size_t N_GC, const Process & process);
 void save_timesCalc(std::vector<double> & t_next_Vec, double t_max, size_t saves_number);
-// double MC(double a, double b, double c);
 double superbee(double a, double b);
 double vanLeer(double a, double b);
-// double minmod2(double a, double b);
 double minmodFlux(double r);
 double superbeeFlux(double r);
 double OuterEdgeLimiter(double r, double r_max, double cl);

@@ -669,7 +669,7 @@ double Q_impCarreau2020BSk24(double n_b, double n_drip){
     if(n_b < n_drip){
         Q = a[0]*pow(u,a[1]) + a[2]*u + a[3];
     }
-    else if(n_b > n_drip){
+    else{ //if (n_b > n_drip)
         Q = ( b[0] + b[1]*u + b[2]*u*u + b[3]*u*u*u )/( b[4] + b[5]*u + b[6]*u*u + b[7]*u*u*u );
     }
 
@@ -728,9 +728,6 @@ void c_vfuncCalc(ScalarField & T, ScalarField & n_e, RadialScalarField & A, Radi
     double kF0, kF2, Delta_n, T_cn, tau, v_A;
     double R_A = 1.; //superfluidity control function for neutron specific heat capacity. Taken to be 1 if no superfluidity.
 
-    // std::fstream Dataout;
-    // Dataout.open("Testing/ThermalPhysicsTesting/SpecificHeatCapacities/CrustCv_T5e8K.dat",std::fstream::out);
-    // Dataout << "n_b (fm^-3)   c_ve (erg/K/cm^3)   c_vi (erg/K/cm^3)   c_vn (erg/K/cm^3)" << std::endl;
     for(size_t i=0; i<c_v.shape()[0]-N_GC+1; i++){
 
         a_i = pow(3./(4.*pi*n_i[i]),1./3.); //ion sphere radius in fm
@@ -753,7 +750,6 @@ void c_vfuncCalc(ScalarField & T, ScalarField & n_e, RadialScalarField & A, Radi
 
             Zeq = n_e[i][j]/n_i[i]; //proton number in unit cell. Only differs from Z near crust-core transition
             T_p = sqrt(T_pconst*Z[i]*Zeq*n_i[i]/A[i]); //plasma temperature in MeV
-            // T_p = sqrt(T_pconst*Z[i]*Zeq*n_i[i]/( A[i] + 0.8*(n_b[i]/n_i[i]-A[i]) ) ); //plasma temperature in MeV
             th = T_p/T_MeV;
             Gamma = alpha_e*hbarc*Z[i]*Zeq/(T_MeV*a_i); //plasma coupling parameter (dimensionless)
             Gamma_q = Gamma/th; //plasma coupling parameter at T=T_p (dimensionless)
@@ -801,7 +797,7 @@ void c_vfuncCalc(ScalarField & T, ScalarField & n_e, RadialScalarField & A, Radi
             else c_vei = 0.;
 
             k_Fn = pow(3.*pi*pi*n_nf[i],1./3.); //free neutron Fermi momentum in fm^{-1}
-            E_Fn = mu_nf[i]-M_n;//sqrt( k_Fn*k_Fn*hbarc*hbarc + M_n*M_n ) - M_n; //mu_nf-M_n in MeV
+            E_Fn = mu_nf[i]-M_n;
             T_cl = 3.*E_Fn/(pi*pi); //in MeV
             pref = ( M_n + 10.*T_MeV )/( M_n + 5.*T_MeV );
             if( E_Fn < 1e-10 ) c_vn = 0.; //if no neutrons (E_Fn ~ 0) set c_vn = 0
@@ -826,12 +822,9 @@ void c_vfuncCalc(ScalarField & T, ScalarField & n_e, RadialScalarField & A, Radi
                     R_A = 1.;
                 }
             }
-            // c_v[i][j] = (c_ve + c_vi_h + c_vi_ah + c_vei + c_vn)/s_0;
             c_v[i][j] = (c_ve + c_vi_h + c_vi_ah + c_vei + R_A*c_vn)/s_0;
         }
     }
-
-    // Dataout.close();
 
     return;
 }
@@ -877,10 +870,6 @@ void q_nuCrustCalc(ScalarField & T, ScalarField & n_e, ScalarField & Bmag, Radia
     static double Q_0 = 1.3858e21; //emissivity scale for plasmon decay in erg/s/cm^3
     static double Cm2 = 0.1748, Cp2 = 1.675; // C_-^2 and C_+^2, the difference/sum between the squares of the vector and axial vector constants squared
     static double amu = 931.49410242; //1 amu in MeV
-//    static double Q_c = 1.023e23; //emissivity scale for pair annihilation in erg/s/cm^3
-//    static double pk0[3] = {23.61, 32.11, 16.};
-//    static double pk1[5] = {42.44, 140.8, 265.2, 287.9, 144.};
-//    static double pk2[7] = {61.33, 321.9, 1153., 2624., 4468., 4600., 2304.};
 
     static double n_drip = cparams.n_b_nd; //neutron drip density in fm^{-3} from equation of state
 
@@ -890,7 +879,6 @@ void q_nuCrustCalc(ScalarField & T, ScalarField & n_e, ScalarField & Bmag, Radia
     double n_i34, R_p, xi, Gamma, tp, Lambda, tau_s, G, H, Gamma_s, Bconst, w_s, w_1s, R_NB, Lfit;
     double T_B, T_P, z, y_1, y_2, F_p_denom_factor, F_p, F_m_denom_factor, F_m, B13, T9, S_AB, S_BC;
     double q_plasmon = 0., q_bremsstrahlung = 0., q_synchrotron = 0.;
-//    double q_pair = 0., y_r, U_m1, U_0, U_1, U_2, Phi_m1, Phi_0, Phi_1, Phi_2, tbar2, tbar3, tbar4, tbar5, tbar6, tbar7;
 
     double DeltaT_MeV = 1e-4; //fraction of T to use as denominator for finite-difference derivative of q_nuCrust
     //if using an IMEX timestepperm, will compite q_nuCrust twice with slightly different T and then compute dq_nuCrustdT using a finite difference
@@ -984,27 +972,6 @@ void q_nuCrustCalc(ScalarField & T, ScalarField & n_e, ScalarField & Bmag, Radia
 
                 q_synchrotron = -9.04e14*B13*B13*T9*T9*T9*T9*T9*S_AB*S_BC; //neutrino synchrotron radiation emissivity in erg/cm^3/s
 
-    //            Assume electrons are degenerate
-    //            y_r = sqrt( 1. + p_F*p_F ); //dimensionless electron chemical potential (p_F is dimensionless electron Fermi momentum)
-    //            U_m1 = ( y_r*p_F - log(p_F+y_r) )/(2.*pi*pi);
-    //            U_0 = p_F*p_F*p_F/(3.*pi*pi);
-    //            U_1 = ( y_r*p_F*(p_F*p_F+y_r*y_r) - log(p_F+y_r) )/(8.*pi*pi);
-    //            U_2 = p_F*p_F*p_F*( 5. + 3.*p_F*p_F )/(15.*pi*pi);
-    //            tbar2 = tbar*tbar;
-    //            tbar3 = tbar2*tbar;
-    //            tbar4 = tbar3*tbar;
-    //            tbar5 = tbar4*tbar;
-    //            tbar6 = tbar5*tbar;
-    //            tbar7 = tbar6*tbar;
-    //            Phi_m1 = tbar/(2.*pi*pi)*sqrt( tbar*(2.*pi+7.662*tbar+1.92*tbar2)/(1.+0.48*tbar) )*exp( -(1.+y_r)/tbar );
-    //            Phi_0 = tbar/(2.*pi*pi)*sqrt( 2.*pi*tbar + pk0[0]*tbar2 + pk0[1]*tbar3 + pk0[2]*tbar4 )*exp( -(1.+y_r)/tbar );
-    //            Phi_1 = tbar/(2.*pi*pi)*sqrt( 2.*pi*tbar + pk1[0]*tbar2 + pk1[1]*tbar3 + pk1[2]*tbar4 + pk1[3]*tbar5 + pk1[4]*tbar6 )*exp( -(1.+y_r)/tbar );
-    //            Phi_2 = tbar/(2.*pi*pi)*sqrt( 2.*pi*tbar + pk2[0]*tbar2 + pk2[1]*tbar3 + pk2[2]*tbar4 + pk2[3]*tbar5 + pk2[4]*tbar6
-    //                                            + pk2[5]*tbar7 + pk2[6]*tbar7*tbar )*exp( -(1.+y_r)/tbar );
-    //
-    //            q_pair = -Q_c/(36.*pi)*( Cp2*( 8.*(Phi_1*U_2 + Phi_2*U_1) - 2.*(Phi_m1*U_2 + Phi_2*U_m1) + 7.*(Phi_0*U_1 + Phi_1*U_0) + 5.*(Phi_0*U_m1 + Phi_m1*U_0) )
-    //                                    + 9.*Cm2*( Phi_0*(U_1 + U_m1) + (Phi_m1 + Phi_1)*U_0 ) ); //neutrino synchrotron radiation emissivity in erg/cm^3/s
-
                 //Define each of q_plasmon, q_bremsstrahlung and q_synchrotron to be negative so include in generalized heat equation as + (q_plasmon + q_bremsstrahlung + q_synchrotron)
                 if(k == 0){
                     q_nuCrust[i][j] = (q_plasmon + q_bremsstrahlung + q_synchrotron)*t_0/(T_0*s_0); //converts to reduced units
@@ -1092,7 +1059,6 @@ void ThermPhysCore(std::string CoreEOS_filename, bool GR, const TParams & tparam
     //temporary variables to hold data table values
     double r_dt, M_dt, gtt_dt, grr_dt, n_b_dt, M_nEff_dt, M_pEff_dt, n_e_dt, n_n_dt, mu_n_dt, Aeq_dt;
     double dummy; //dummy variable to avoid saving all quantities from loaded data table
-//    double p_Fn, p_Fp, mu_e; //neutron Fermi momentum in MeV
 
 	Datafile.open(filename.str().c_str(),std::fstream::in);
 	std::getline(Datafile, dummyLine); //skips header (1 line)
@@ -1328,8 +1294,6 @@ double q_nuMUrca(double T, double n_b, double Y, double Y_e, double M_nEff, doub
     //Electronic MUrca process
     if( tparams.InMediumMUrca == true ){ //compute in-medium correction factors for electrons if enabled
         mu_e = sqrt( p_Fe*p_Fe + M_e*M_e );
-//        RdirA = 2.*M_pEff*M_pEff*mu_e*mu_e/p_Fe*( p_Fe*( p_Fn*p_Fn + p_Fp*p_Fp - p_Fe*p_Fe )/( p_Fp*p_Fp*( p_Fn*p_Fn - ( p_Fp + p_Fe )*( p_Fp + p_Fe ) )*( p_Fn*p_Fn - ( p_Fp - p_Fe )*( p_Fp - p_Fe ) ) )
-//                                                  + ( atanh( p_Fp/( p_Fn + p_Fe ) ) - atanh( p_Fp/( p_Fn - p_Fe ) ) )/( 2.*p_Fp*p_Fp*p_Fp ) );
         RdirA = 2.*M_pEff*M_pEff*mu_e*mu_e/p_Fe*( p_Fe*( p_Fn*p_Fn + p_Fp*p_Fp - p_Fe*p_Fe )/( p_Fp*p_Fp*( ( p_Fe - p_Fn - p_Fp )*( p_Fe + p_Fn - p_Fp )*( p_Fe - p_Fn + p_Fp )*( p_Fe + p_Fn + p_Fp ) ) )
                                                   + ( atanh( p_Fp/( p_Fn + p_Fe ) ) - atanh( p_Fp/( p_Fn - p_Fe ) ) )/( 2.*p_Fp*p_Fp*p_Fp ) );
         RdirB = 2.*M_nEff*M_nEff*mu_e*mu_e/(p_Fe*p_Fp)*( 2.*p_Fe*p_Fp/( p_Fe*p_Fe*p_Fe*p_Fe + ( p_Fn*p_Fn - p_Fp*p_Fp )*( p_Fn*p_Fn - p_Fp*p_Fp ) - 2.*p_Fe*p_Fe*( p_Fn*p_Fn + p_Fp*p_Fp ) ) );

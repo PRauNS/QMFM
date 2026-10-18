@@ -5,38 +5,32 @@
 #include <shtns.h>
 
 #include "common.h"
-#include "initial_conditions.h"
 #include "boundary_conditions.h"
 
 void B_Symmetrize(VectorField & B, const BParams & bparams, size_t Ntheta, size_t N_GC, const Process & process, std::vector<int> & Ntheta_locs, std::vector<int> & starts, const Domain & dm)
 {
     MPI_Comm comm1D = process.comm1D; //MPI communicator for decomposed domain
     int world_rank = process.world_rank; //rank of current process
-    int nbrleft = process.nbrleft; //the rank of the process to the left of the current process
-    int nbrright = process.nbrright; //the rank of the process to the right of the current process
 
-    std::vector<double> Bphi_BC(B.shape()[2]-2*N_GC); //array to hold the Bphi values to be used to symmetrize outer boundary
-    std::vector<double> Bphi_BC_sym(B.shape()[2]-2*N_GC); //array to hold the symmetrized Bphi values
+    std::vector<double> Bphi(B.shape()[2]-2*N_GC); //array to hold the Bphi values to be symmetrized
+    std::vector<double> Bphi_sym(B.shape()[2]-2*N_GC); //array to hold the symmetrized Bphi values
 
     for(size_t i=N_GC-1; i<=B.shape()[1]-N_GC-1; i++){
 
-        // std::cout << "i = " << i << ", process = " << world_rank << std::endl;
-
         for(size_t j=0; j<B.shape()[2]-2*N_GC; j++){
-            Bphi_BC[j] = B[2][i][N_GC+j];
+            Bphi[j] = B[2][i][N_GC+j];
         }
 
-        Bphi_Outer_Sym(Bphi_BC, Bphi_BC_sym, Ntheta, Ntheta_locs, starts, world_rank, comm1D);
+        Bphi_Sym(Bphi, Bphi_sym, Ntheta, Ntheta_locs, starts, world_rank, comm1D);
 
         for(size_t j=N_GC; j<B.shape()[2]-N_GC; j++){
-            B[2][i][j] = Bphi_BC_sym[j-N_GC];
+            B[2][i][j] = Bphi_sym[j-N_GC];
         }
 
     }
 
     return;
 }
-
 
 /*
         Sets boundary condition on magnetic field
@@ -56,8 +50,6 @@ void B_BoundaryConditions(VectorField & B, const BParams & bparams, size_t Nthet
     int nbrleft = process.nbrleft; //the rank of the process to the left of the current process
     int nbrright = process.nbrright; //the rank of the process to the right of the current process
 
-    size_t Outeri = B.shape()[1]-N_GC-1;
-
     //Exchange ghost cells in a periodic manner in the theta-direction
     exchng2Vector(B, N_GC, process, dm.stridetype_Vec);
 
@@ -69,24 +61,7 @@ void B_BoundaryConditions(VectorField & B, const BParams & bparams, size_t Nthet
         Br_BC[j] = B[0][B.shape()[1]-N_GC-1][N_GC+j];
     }
 
-    //double n_r = 0.5*(dm.n_r[B.shape()[1]-N_GC-1]+dm.n_r[B.shape()[1]-N_GC]);//0.5*(dm.n_r[B.shape()[1]-N_GC-2]+dm.n_r[B.shape()[1]-N_GC-1]);
     Btheta_BC_Calc(Br_BC, Btheta_BC, Ntheta, Ntheta_locs, starts, dm.n_router, world_rank, comm1D);
-
-    //Symmetrize outermost B_phi values. Helps maintain equatorial symmetry
-    // if(dm.InitiallyEquatoriallySymmetric == true){
-    //     std::vector<double> Bphi_BC(B.shape()[2]-2*N_GC); //array to hold the Bphi values to be used to symmetrize outer boundary
-    //     std::vector<double> Bphi_BC_sym(B.shape()[2]-2*N_GC); //array to hold the symmetrized Bphi values
-    //
-    //     for(size_t j=0; j<B.shape()[2]-2*N_GC; j++){
-    //         Bphi_BC[j] = B[2][B.shape()[1]-N_GC-2][N_GC+j];
-    //     }
-    //
-    //     Bphi_Outer_Sym(Bphi_BC, Bphi_BC_sym, Ntheta, Ntheta_locs, starts, world_rank, comm1D);
-    //
-    //     for(size_t j=N_GC; j<B.shape()[2]-N_GC; j++){
-    //         B[2][B.shape()[1]-N_GC-2][j] = Bphi_BC_sym[j-N_GC];
-    //     }
-    // }
 
     //Impose boundary conditions at non-periodic boundaries
     for(size_t i=0; i<N_GC; i++){
@@ -107,7 +82,7 @@ void B_BoundaryConditions(VectorField & B, const BParams & bparams, size_t Nthet
                 B[1][N_GC-1-i][j] = B[1][N_GC+i][j]; //Btheta is continuous
                 B[2][N_GC-1-i][j] = B[2][N_GC+i][j]; //Bphi is continuous
             }
-            else if(bparams.B_parallel_lower == "zero"){
+            else if(bparams.B_parallel_lower == "zero") {
                 B[1][N_GC-1-i][j] = -B[1][N_GC+i][j]; //Btheta = 0
                 B[2][N_GC-1-i][j] = -B[2][N_GC+i][j]; //Bphi = 0
             }
@@ -117,29 +92,14 @@ void B_BoundaryConditions(VectorField & B, const BParams & bparams, size_t Nthet
             */
             if(bparams.B_pol_upper == "vacuum"){
                 B[0][B.shape()[1]-N_GC+i][j] = B[0][B.shape()[1]-N_GC-2-i][j]; //Br is continuous
-//                B[0][B.shape()[1]-N_GC+i][j] = (dm.r[B.shape()[1]-N_GC+i]-0.5*dm.Deltar[B.shape()[1]-N_GC+i])/(dm.r[B.shape()[1]-N_GC-2-i]-0.5*dm.Deltar[B.shape()[1]-N_GC-2-i])*B[0][B.shape()[1]-N_GC-2-i][j]; //Br is continuous
-                //Btheta equals the value related to the Legendre transform of Br such that B is a potential field in the vacuum exterior.
                 B[1][B.shape()[1]-N_GC-1+i][j] = 2.*Btheta_BC[j-N_GC] - B[1][B.shape()[1]-N_GC-2-i][j];
-                // B_theta_slope = minmod2( (B[1][Outeri-1][j]-B[1][Outeri-2][j])/(0.5*dm.Deltar[Outeri-1]+0.5*dm.Deltar[Outeri-2]), (B[1][Outeri-2][j]-B[1][Outeri-3][j])/(0.5*dm.Deltar[Outeri-2]+0.5*dm.Deltar[Outeri-3]) );
-                // B[1][B.shape()[1]-N_GC-2][j] = B[1][Outeri-2][j] + B_theta_slope*(0.5*dm.Deltar[Outeri-2]+0.5*dm.Deltar[Outeri-1]);
-                // B[1][B.shape()[1]-N_GC-1+i][j] = ( 2.*dm.r_max*Btheta_BC[j-N_GC] - dm.r[B.shape()[1]-N_GC-2]*B[1][B.shape()[1]-N_GC-2-i][j] )/( dm.r_max + 0.5*dm.Deltar[B.shape()[1]-N_GC-1]  );
             }
-
-            // if(i == 0) {
-            //     Dataout << Btheta_BC[j-N_GC] << "  ";
-            // }
-
             if(bparams.B_tor_upper == "vacuum"){
-                // B_phi_slope = minmod2( (B[2][Outeri-1][j]-B[2][Outeri-2][j])/(0.5*dm.Deltar[Outeri-1]+0.5*dm.Deltar[Outeri-2]), (B[2][Outeri-2][j]-B[2][Outeri-3][j])/(0.5*dm.Deltar[Outeri-2]+0.5*dm.Deltar[Outeri-3]) );
-                // B[2][B.shape()[1]-N_GC-2][j] = B[2][Outeri-2][j] + B_phi_slope*(0.5*dm.Deltar[Outeri-2]+0.5*dm.Deltar[Outeri-1]);
                 B[2][B.shape()[1]-N_GC-1+i][j] = -B[2][B.shape()[1]-N_GC-2-i][j]; //Bphi = 0
-//                B[2][B.shape()[1]-N_GC-1+i][j] = ( -2.*dm.r[B.shape()[1]-N_GC-2]*B[2][B.shape()[1]-N_GC-2-i][j] + 1./3.*dm.r[B.shape()[1]-N_GC-3]*B[2][B.shape()[1]-N_GC-3-i][j] )/( dm.r_max + 0.5*dm.Deltar[B.shape()[1]-N_GC-1]  );
             }
 
         }
-        // Dataout << std::endl;
     }
-    // Dataout.close();
 
     //Exchange ghost cells in a periodic manner in the theta-direction after imposing boundary conditions
     exchng2Vector(B, N_GC, process, dm.stridetype_Vec);
@@ -191,8 +151,6 @@ void B_BoundaryConditionsIntermediate(VectorField & B, const BParams & bparams, 
     int nbrleft = process.nbrleft; //the rank of the process to the left of the current process
     int nbrright = process.nbrright; //the rank of the process to the right of the current process
 
-    size_t Outeri = B.shape()[1]-N_GC-1;
-
     //Exchange ghost cells in a periodic manner in the theta-direction
     exchng2Vector(B, N_GC, process, dm.stridetype_Vec);
 
@@ -226,14 +184,10 @@ void B_BoundaryConditionsIntermediate(VectorField & B, const BParams & bparams, 
             if(bparams.B_pol_upper == "vacuum"){
                 B[0][B.shape()[1]-N_GC+i][j] = B[0][B.shape()[1]-N_GC-2-i][j]; //Br is continuous
                 //Btheta equals the value related to the Fourier coefficients of Br such that B is a potential field in the vacuum exterior.
-                // B_theta_slope = minmod2( (B[1][Outeri-1][j]-B[1][Outeri-2][j])/(0.5*dm.Deltar[Outeri-1]+0.5*dm.Deltar[Outeri-2]), (B[1][Outeri-2][j]-B[1][Outeri-3][j])/(0.5*dm.Deltar[Outeri-2]+0.5*dm.Deltar[Outeri-3]) );
-                // B[1][B.shape()[1]-N_GC-2][j] = B[1][Outeri-2][j] + B_theta_slope*(0.5*dm.Deltar[Outeri-2]+0.5*dm.Deltar[Outeri-1]);
                 // B[1][B.shape()[1]-N_GC-1+i][j] = B[1][B.shape()[1]-N_GC-2-i][j];
             }
 
             if(bparams.B_tor_upper == "vacuum"){
-                // B_phi_slope = minmod2( (B[2][Outeri-1][j]-B[2][Outeri-2][j])/(0.5*dm.Deltar[Outeri-1]+0.5*dm.Deltar[Outeri-2]), (B[2][Outeri-2][j]-B[2][Outeri-3][j])/(0.5*dm.Deltar[Outeri-2]+0.5*dm.Deltar[Outeri-3]) );
-                // B[2][B.shape()[1]-N_GC-2][j] = B[2][Outeri-2][j] + B_phi_slope*(0.5*dm.Deltar[Outeri-2]+0.5*dm.Deltar[Outeri-1]);
                 B[2][B.shape()[1]-N_GC-1+i][j] = -B[2][B.shape()[1]-N_GC-2-i][j]; //Bphi = 0
             }
 
@@ -345,7 +299,6 @@ void Btheta_BC_Calc(std::vector<double> & Br_BC, std::vector<double> & Btheta_BC
         for(int i=0; i<lmax+1-m_theta; i++){
             l = double(i+1);
             Btheta_lm[i] = -Br_lm[i+1]*sqrt(l/(l+1.))*n_r/( 1. - (2.*l+1.)/(2.*l+2.)*(n_r-1.) );
-//            Btheta_lm[i] = -Br_lm[i+1]*sqrt(l/(l+1))*n_r/( 1. - (2.*l+1.)/(2.*l+2.)*(n_r-1.) );
             //Shift indices by -1 because there is no P_{l=0}^{m=1} associated Legendre polynomial
         }
         //transform Btheta from Legendre P^1_l series to spatial representation
@@ -373,16 +326,16 @@ void Btheta_BC_Calc(std::vector<double> & Br_BC, std::vector<double> & Btheta_BC
 }
 
 /*
- *   Computes Btheta given Br and the requirement that the external field is a potential field using fast Fourier transforms
+ *   Antisymmetrizes B_phi values across theta=pi/2
  *   Scatters this information to each process
- *   Inputs: Bphi_outer: vector of values of Bphi on the r=Lr boundary
+ *   Inputs: Bphi_outer: vector of values of Bphi on at constant r coordinate
  *           Ntheta: length of full simulation domain in theta direction excluding ghost cells
  *           Ntheta_locs, starts: vectors containing the extent and starting indices of the domain in the decomposed direction
  *           world_rank: rank of current process
  *           comm1D: MPI communicator for decomposed domain
- *   Output: Bphi_outer_sym: Bphi: vector of values of Bphi on the x=Lx boundary
+ *   Output: Bphi_sym: Bphi: vector of values of Bphi on the at constant r coordinate, antisymmetrized across theta=pi/2
  */
-void Bphi_Outer_Sym(std::vector<double> & Bphi_outer, std::vector<double> & Bphi_outer_sym, size_t Ntheta, std::vector<int> & Ntheta_locs, std::vector<int> & starts, int world_rank, MPI_Comm comm1D)
+void Bphi_Sym(std::vector<double> & Bphi_in, std::vector<double> & Bphi_out_sym, size_t Ntheta, std::vector<int> & Ntheta_locs, std::vector<int> & starts, int world_rank, MPI_Comm comm1D)
 {
     std::vector<double> Bphi;
     std::vector<double> Bphi_sym;
@@ -393,7 +346,7 @@ void Bphi_Outer_Sym(std::vector<double> & Bphi_outer, std::vector<double> & Bphi
 
     // Gather the values of Br(r=r_max) from across the different processes
     // Don't take ghost cells
-    MPI_Gatherv(&Bphi_outer.front(), Ntheta_locs[world_rank], MPI_DOUBLE, &Bphi.front(), Ntheta_locs.data(), starts.data(), MPI_DOUBLE, 0, comm1D);
+    MPI_Gatherv(&Bphi_in.front(), Ntheta_locs[world_rank], MPI_DOUBLE, &Bphi.front(), Ntheta_locs.data(), starts.data(), MPI_DOUBLE, 0, comm1D);
 
     /*
      *       On root process, symmetrize B_phi
@@ -408,7 +361,7 @@ void Bphi_Outer_Sym(std::vector<double> & Bphi_outer, std::vector<double> & Bphi
     }
 
     //Send the values of Btheta(r=r_max) back to the processes.
-    MPI_Scatterv(&Bphi_sym.front(), Ntheta_locs.data(), starts.data(), MPI_DOUBLE, &Bphi_outer_sym.front(), Ntheta_locs.data()[world_rank], MPI_DOUBLE, 0, comm1D);
+    MPI_Scatterv(&Bphi_sym.front(), Ntheta_locs.data(), starts.data(), MPI_DOUBLE, &Bphi_out_sym.front(), Ntheta_locs.data()[world_rank], MPI_DOUBLE, 0, comm1D);
 
     return;
 }
@@ -429,8 +382,6 @@ void Bphi_BoundaryConditions(VectorField & B, const BParams & bparams, size_t Nt
 {
     int nbrleft = process.nbrleft; //the rank of the process to the left of the current process
     int nbrright = process.nbrright; //the rank of the process to the right of the current process
-
-    size_t Outeri = B.shape()[1]-N_GC-1;
 
     //Exchange ghost cells in a periodic manner in the theta-direction
     exchng2Vector(B, N_GC, process, dm.stridetype_Vec);
@@ -453,10 +404,7 @@ void Bphi_BoundaryConditions(VectorField & B, const BParams & bparams, size_t Nt
                 Upper boundary r=r_max
             */
             if(bparams.B_tor_upper == "vacuum"){
-                // B_phi_slope = minmod2( (B[2][Outeri-1][j]-B[2][Outeri-2][j])/(0.5*dm.Deltar[Outeri-1]+0.5*dm.Deltar[Outeri-2]), (B[2][Outeri-2][j]-B[2][Outeri-3][j])/(0.5*dm.Deltar[Outeri-2]+0.5*dm.Deltar[Outeri-3]) );
-                // B[2][B.shape()[1]-N_GC-2][j] = B[2][Outeri-2][j] + B_phi_slope*(0.5*dm.Deltar[Outeri-2]+0.5*dm.Deltar[Outeri-1]);
                 B[2][B.shape()[1]-N_GC-1+i][j] = -B[2][B.shape()[1]-N_GC-2-i][j]; //Bphi = 0
-//                B[2][B.shape()[1]-N_GC-1+i][j] = ( -2.*dm.r[B.shape()[1]-N_GC-2]*B[2][B.shape()[1]-N_GC-2-i][j] + 1./3.*dm.r[B.shape()[1]-N_GC-3]*B[2][B.shape()[1]-N_GC-3-i][j] )/( dm.r_max + 0.5*dm.Deltar[B.shape()[1]-N_GC-1]  );
             }
         }
     }
@@ -500,9 +448,6 @@ void E_BoundaryConditions(VectorField & phE, VectorField & cE, const BParams & b
     int nbrleft = process.nbrleft; //the rank of the process to the left of the current process
     int nbrright = process.nbrright; //the rank of the process to the right of the current process
 
-    // size_t Outeri = phE.shape()[1]-N_GC-1;
-    // double phE_r_slope, phE_th_slope, phE_phi_slope;
-
     //Impose boundary conditions at non-periodic boundaries
     for(size_t i=0; i<N_GC; i++){
         for(size_t j=N_GC; j<phE.shape()[2]-N_GC; j++){
@@ -510,61 +455,25 @@ void E_BoundaryConditions(VectorField & phE, VectorField & cE, const BParams & b
                 Lower boundary r=r_min
             */
             if(bparams.E_perp_lower == "perfect_conducting"){
-                phE[0][N_GC-1-i][j] = phE[0][N_GC+i][j]; //Er is continuous
-                cE[0][N_GC-1-i][j] = cE[0][N_GC+i][j]; //Er is continuous
+                phE[0][N_GC-1-i][j] = phE[0][N_GC+i+1][j]; //Er is continuous
+                cE[0][N_GC-1-i][j] = cE[0][N_GC+i+1][j]; //Er is continuous
             }
             if(bparams.E_parallel_lower == "perfect_conducting"){
-                // cE[1][N_GC-1-i][j] = -cE[1][N_GC+i][j]; //Etheta = 0
-                // cE[2][N_GC-1-i][j] = -cE[2][N_GC+i][j]; //Ephi = 0
-                phE[1][N_GC-1-i][j] = -phE[1][N_GC+1+i][j]; //Etheta = 0
-                phE[2][N_GC-1-i][j] = -phE[2][N_GC+1+i][j]; //Ephi = 0
+                phE[1][N_GC-1-i][j] = -phE[1][N_GC+i+1][j]; //Etheta = 0
+                phE[2][N_GC-1-i][j] = -phE[2][N_GC+i+1][j]; //Ephi = 0
                 phE[1][N_GC][j] = 0.;
                 phE[2][N_GC][j] = 0.;
-                cE[1][N_GC-1-i][j] = -cE[1][N_GC+1+i][j]; //Etheta = 0
-                cE[2][N_GC-1-i][j] = -cE[2][N_GC+1+i][j]; //Ephi = 0
+                cE[1][N_GC-1-i][j] = -cE[1][N_GC+i+1][j]; //Etheta = 0
+                cE[2][N_GC-1-i][j] = -cE[2][N_GC+i+1][j]; //Ephi = 0
                 cE[1][N_GC][j] = 0.;
                 cE[2][N_GC][j] = 0.;
             }
             else if(bparams.E_parallel_lower == "continuous"){
-                // thE[2][N_GC-1-i][j] = thE[2][N_GC+1+i][j]; //Ephi is continuous
-                phE[2][N_GC-1-i][j] = phE[2][N_GC+1+i][j]; //Ephi is continuous
-                cE[2][N_GC-1-i][j] = cE[2][N_GC+1+i][j]; //Ephi is continuous
+                phE[1][N_GC-1-i][j] = phE[1][N_GC+i+1][j]; //Etheta is continuous
+                phE[2][N_GC-1-i][j] = phE[2][N_GC+i+1][j]; //Ephi is continuous
+                cE[1][N_GC-1-i][j] = cE[1][N_GC+i+1][j]; //Etheta is continuous
+                cE[2][N_GC-1-i][j] = cE[2][N_GC+i+1][j]; //Ephi is continuous
             }
-            /*
-                Upper boundary r=r_max
-            */
-            // phE at outer boundary i is constructed by linear interpolation from phE at i-1 and i-2
-            // phE[0][Outeri][j] = 0.5*(phE[0][Outeri][j]+phE[0][Outeri-1][j]); //
-            // phE[1][Outeri][j] = 0.5*(phE[1][Outeri][j]+phE[1][Outeri-1][j]); //
-            // phE[2][Outeri][j] = 0.5*(phE[2][Outeri][j]+phE[2][Outeri-1][j]); //
-            // phE_r_slope = minmod2( (phE[0][Outeri][j]-phE[0][Outeri-1][j])/dm.Deltar[Outeri-1], (phE[0][Outeri-1][j]-phE[0][Outeri-2][j])/dm.Deltar[Outeri-2] );
-            // phE_th_slope = minmod2( (phE[1][Outeri][j]-phE[1][Outeri-1][j])/dm.Deltar[Outeri-1], (phE[1][Outeri-1][j]-phE[1][Outeri-2][j])/dm.Deltar[Outeri-2] );
-            // phE_phi_slope = minmod2( (phE[2][Outeri][j]-phE[2][Outeri-1][j])/dm.Deltar[Outeri-1], (phE[2][Outeri-1][j]-phE[2][Outeri-2][j])/dm.Deltar[Outeri-2] );
-            // phE[0][Outeri][j] = phE[0][Outeri-1][j] + phE_r_slope*dm.Deltar[Outeri-1]; //
-            // phE[1][Outeri][j] = phE[1][Outeri-1][j] + phE_th_slope*dm.Deltar[Outeri-1]; //
-            // phE[2][Outeri][j] = phE[2][Outeri-1][j] + phE_phi_slope*dm.Deltar[Outeri-1]; //
-            // phE[0][Outeri][j] = phE[0][Outeri-1][j] + (phE[0][Outeri-1][j]-phE[0][Outeri-2][j])/dm.Deltar[Outeri-2]*( dm.r[Outeri-1]-dm.r[Outeri-2] + 0.5*(dm.Deltar[Outeri-1]-dm.Deltar[Outeri-2]) ); //
-            // phE[1][Outeri][j] = phE[1][Outeri-1][j] + (phE[1][Outeri-1][j]-phE[1][Outeri-2][j])/dm.Deltar[Outeri-2]*( dm.r[Outeri-1]-dm.r[Outeri-2] + 0.5*(dm.Deltar[Outeri-1]-dm.Deltar[Outeri-2]) ); //
-            // phE[2][Outeri][j] = phE[2][Outeri-1][j] + (phE[2][Outeri-1][j]-phE[2][Outeri-2][j])/dm.Deltar[Outeri-2]*( dm.r[Outeri-1]-dm.r[Outeri-2] + 0.5*(dm.Deltar[Outeri-1]-dm.Deltar[Outeri-2]) ); //
-
-//            if(bparams.E_perp_upper == "vacuum"){
-//                phE[0][phE.shape()[1]-N_GC-1][j] = 0; //Er vanishes
-//            }
-//            else if(bparams.E_perp_upper == "continuous"){
-//                phE[0][phE.shape()[1]-N_GC+i][j] = phE[0][phE.shape()[1]-N_GC-2-i][j]; //Er is continuous
-//            }
-//            if(bparams.E_parallel_upper == "vacuum"){
-//                phE[1][phE.shape()[1]-N_GC+i][j] = -phE[1][phE.shape()[1]-N_GC-2-i][j]; //Etheta = 0
-//                phE[2][phE.shape()[1]-N_GC+i][j] = -phE[2][phE.shape()[1]-N_GC-2-i][j]; //Ephi = 0
-////                phE[1][phE.shape()[1]-N_GC-1][j] = 0.; //Etheta = 0
-////                phE[2][phE.shape()[1]-N_GC-1][j] = 0.; //Ephi = 0
-//                //E[1][E.shape()[1]-N_GC-1][j] = 0.; //E_theta does not need to vanish at outer boundary
-//                //E[2][E.shape()[1]-N_GC-1][j] = 0.; //E_phi does not need to vanish at outer boundary
-//            }
-//            else if(bparams.E_parallel_upper == "continuous"){
-//                phE[1][phE.shape()[1]-N_GC+i][j] = phE[1][phE.shape()[1]-N_GC-2-i][j]; //Etheta is continuous
-//                phE[2][phE.shape()[1]-N_GC+i][j] = phE[2][phE.shape()[1]-N_GC-2-i][j]; //Ephi is continuous
-//            }
         }
     }
 
@@ -577,9 +486,6 @@ void E_BoundaryConditions(VectorField & phE, VectorField & cE, const BParams & b
     if( nbrleft < 0 ){
         for(size_t i=N_GC; i<phE.shape()[1]-N_GC; i++){
             for(size_t j=0; j<N_GC; j++){
-                // cE[0][i][N_GC-1-j] = cE[0][i][N_GC+j];
-                // cE[1][i][N_GC-1-j] = -cE[1][i][N_GC+j];
-                // cE[2][i][N_GC-1-j] = -cE[2][i][N_GC+j];
                 phE[0][i][N_GC-1-j] = phE[0][i][N_GC+1+j];
                 phE[1][i][N_GC-1-j] = -phE[1][i][N_GC+1+j];
                 phE[2][i][N_GC-1-j] = -phE[2][i][N_GC+1+j];
@@ -595,18 +501,12 @@ void E_BoundaryConditions(VectorField & phE, VectorField & cE, const BParams & b
     }
     if( nbrright < 0 ){
         for(size_t i=N_GC; i<phE.shape()[1]-N_GC; i++){
-            // cE[0][i][cE.shape()[2]-N_GC] = cE[0][i][cE.shape()[2]-N_GC-1];
-            // cE[1][i][cE.shape()[2]-N_GC] = -cE[1][i][cE.shape()[2]-N_GC-1];
-            // cE[2][i][cE.shape()[2]-N_GC] = -cE[2][i][cE.shape()[2]-N_GC-1];
             phE[0][i][phE.shape()[2]-N_GC+1] = phE[0][i][phE.shape()[2]-N_GC-1];
             phE[1][i][phE.shape()[2]-N_GC+1] = -phE[1][i][phE.shape()[2]-N_GC-1];
             phE[2][i][phE.shape()[2]-N_GC+1] = -phE[2][i][phE.shape()[2]-N_GC-1];
             cE[0][i][phE.shape()[2]-N_GC+1] = cE[0][i][phE.shape()[2]-N_GC-1];
             cE[1][i][phE.shape()[2]-N_GC+1] = -cE[1][i][phE.shape()[2]-N_GC-1];
             cE[2][i][phE.shape()[2]-N_GC+1] = -cE[2][i][phE.shape()[2]-N_GC-1];
-            //phE[0][i][phE.shape()[2]-N_GC] = phE[0][i][phE.shape()[2]-N_GC-1];
-            // cE[1][i][cE.shape()[2]-N_GC+1] = -cE[1][i][cE.shape()[2]-N_GC-2];
-            // cE[2][i][cE.shape()[2]-N_GC+1] = -cE[2][i][cE.shape()[2]-N_GC-2];
             phE[1][i][phE.shape()[2]-N_GC] = 0.;
             phE[2][i][phE.shape()[2]-N_GC] = 0.;
             cE[1][i][phE.shape()[2]-N_GC] = 0.;
@@ -641,17 +541,11 @@ void T_BoundaryConditions(ScalarField & T, VectorField & q, double Tcore, TransC
     double Tb8, Tb9; //local temperature at bottom of heat blanketing envelope in units of 10^8 K or 10^9 K
     double theta_mc, theta_B; //magnetic colatitude in radians and magnetic field inclination angle in radians
 
-    double a, b, RadialTerm, TangentialTerm, kappa_r, kappa_th;
-
     size_t O_index = T.shape()[0]-N_GC-1; //radial index of exterior cell (whose value we are setting)
     double DeltarOuter = 0.5*( dm.Deltar[O_index-1] + dm.Deltar[O_index] );
     double B12 = tparams.B_pol*B_0/1e12; //initial magnetic field at poles in 10^12 G
 
     static double g_f = dm.n_t[O_index-1]*dm.n_t[O_index-1]*pow(r_s/r_b,2.); //factor of exp(nu/2)*(R_out/R_b)^2
-    static double x_g = (1.-1./(dm.n_r[O_index-1]*dm.n_r[O_index-1]))*dm.r[O_index-1]/r_s;
-    // static double a_g; //general relativistic correction parameter for magnetic field inclination angle. Equals 1/2 in nonrelativistic limit x_g = 0. Only used for T_upper = "magnetic_P01"
-    // if( dm.n_r[O_index-1] <= 1+1e-10 ) a_g = 0.5;
-    // else a_g = -( (1.-x_g)*log(1.-x_g)+x_g-0.5*x_g*x_g )/( (log(1.-x_g)+x_g+0.5*x_g*x_g)*sqrt(1.-x_g) );
 
     double Ts4_sum = 0.; //running sum of (local surface temperature)^4 values in reduced units.
 
@@ -691,24 +585,9 @@ void T_BoundaryConditions(ScalarField & T, VectorField & q, double Tcore, TransC
         else {
             std::cout << "Outer thermal boundary condition not set" << std::endl;
         }
-        a = g_f*sigma_SBbar*Ts_star*Ts_star*Ts_star*( Ts_star - 2.*dTsdTb/dm.n_t[O_index-1]*(T[O_index][j] + T[O_index-1][j]) );
-        b = 2.*g_f*sigma_SBbar*Ts_star*Ts_star*Ts_star*dTsdTb/dm.n_t[O_index-1];
-
-        if(tparams.conductivity_anisotropy == true){
-            kappa_r = 0.5*( (tC.kappa_delta[O_index-1][j]+tC.kappa_delta[O_index][j])*mC.thBhat[0][O_index][j]*mC.thBhat[0][O_index][j] + (tC.kappa_perp[O_index-1][j]+tC.kappa_perp[O_index][j]) );
-            kappa_th = 0.5*( (tC.kappa_delta[O_index-1][j]+tC.kappa_delta[O_index][j])*mC.thBhat[0][O_index][j]*mC.thBhat[1][O_index][j] - (tC.kappa_H[O_index-1][j]+tC.kappa_H[O_index][j])*mC.thBhat[2][O_index][j] );
-            RadialTerm = dm.n_t[O_index-1]*kappa_r/(DeltarOuter*dm.n_r[O_index-1]); //K_r
-            TangentialTerm = 0*dm.n_t[O_index-1]*kappa_th/r_b*0.5/tan(dm.Deltatheta/2.)*( T[O_index-1][j+1] - T[O_index-1][j-1] )/2.; //K_theta
-            // std::cout << "j = " << j << ", thBhat_r = " << mC.thBhat[0][O_index][j] << std::endl;
-        }
-        else{
-            kappa_r = 0.5*(tC.kappa[O_index-1][j]+tC.kappa[O_index][j]); //if only one isotropic thermal conductivity, do not need to take an average
-            RadialTerm = dm.n_t[O_index-1]*kappa_r/(DeltarOuter*dm.n_r[O_index-1]); //K_r
-            TangentialTerm = 0.;
-        }
 
         q[0][O_index][j] = g_f*sigma_SBbar*Ts_star*Ts_star*Ts_star*Ts_star;
-        T[O_index][j] = T[O_index-1][j]; //( RadialTerm - b )/( RadialTerm + b )*T[O_index-1][j] - ( TangentialTerm + a )/( RadialTerm + b );
+        T[O_index][j] = T[O_index-1][j];
         T[O_index+1][j] = (T[O_index][j]-T[O_index-1][j])/(dm.n_r[O_index-1]*DeltarOuter)*( dm.n_r[O_index-1]*DeltarOuter + dm.n_r[O_index]*0.5*(dm.Deltar[O_index] + dm.Deltar[O_index+1]) ) + T[O_index-1][j];
 
         Ts4_sum += 2.*pi*sin(dm.theta[j])*2.*sin(dm.Deltatheta/2.)*Ts*Ts*Ts*Ts; //local surface temperature^4 integrated over area element.
@@ -884,12 +763,9 @@ void T_InnerBC_r(double & b_0_term, double & d_0_term, double Tcore, const Domai
 
     double DeltaT = 1e-4*Tcore; //temperature step used in computing dQ_nuCoredT, the finite difference derivative of Q_nuCore with respect to temperature
     double dQ_nuCoredT = ( gsl_spline_eval( corethermalparams.Q_nuCore, Tcore+0.5*DeltaT, corethermalparams.Q_nuCore_acc ) - gsl_spline_eval( corethermalparams.Q_nuCore, Tcore-0.5*DeltaT, corethermalparams.Q_nuCore_acc ) )/DeltaT;
-    // double denom = 1. - dm.Deltat*a_ii*( dQ_nuCoredT/C_v + corethermalparams.HeatFlux_pref/C_v ); //denominator of implicit calculation of T_core
     double denom = 1. - 0*dm.Deltat*a_ii*( dQ_nuCoredT/C_v ); //denominator of implicit calculation of T_core
 
     //T_{i=N_GC-1} = b_0_term*T_{i=N_GC} + d_0_term
-    // b_0_term = -dm.Deltat*a_ii*corethermalparams.HeatFlux_pref/C_v/denom;
-    // d_0_term = ( Tcore + dm.Deltat*a_ii*( Q_nu/C_v + corethermalparams.HeatFlux_H/C_v - dQ_nuCoredT*Tcore/C_v ) )/denom;
     b_0_term = 0.;//-dm.Deltat*a_ii*corethermalparams.HeatFlux_pref/C_v/denom;
     d_0_term = ( Tcore + 0*dm.Deltat*a_ii*( Q_nu/C_v - dQ_nuCoredT*Tcore/C_v - corethermalparams.HeatFlux/C_v ) )/denom;
 
@@ -926,10 +802,6 @@ void T_OuterBC_r(size_t j, double & b_n_term, double & d_n_term, ScalarField & T
     double B12 = tparams.B_pol*B_0/1e12; //initial magnetic field at poles in 10^12 G
 
     static double g_f = dm.n_t[O_index-1]*dm.n_t[O_index-1]*pow(r_s/r_b,2.); //factor of exp(nu)*(R_out/R_b)^2
-    static double x_g = (1.-1./(dm.n_r[O_index-1]*dm.n_r[O_index-1]))*dm.r[O_index-1]/r_s;
-    static double a_g; //general relativistic correction parameter for magnetic field inclination angle. Equals 1/2 in nonrelativistic limit x_g = 0. Only used for T_upper = "magnetic_P01"
-    // if( dm.n_r[O_index-1] <= 1+1e-10 ) a_g = 0.5;
-    // else a_g = -( (1.-x_g)*log(1.-x_g)+x_g-0.5*x_g*x_g )/( (log(1.-x_g)+x_g+0.5*x_g*x_g)*sqrt(1.-x_g) );
 
     if(tparams.T_upper == "non-magnetic_G83"){
         Tb8 = T[O_index-1][j]/dm.n_t[O_index-1]*T_0/1.e8; //local temperature at inner edge of heat-blanketing envelope (outer edge of simulation domain) in units of 10^9 K

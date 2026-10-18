@@ -40,14 +40,14 @@ inline double MC(double a, double b, double c) noexcept
 void Compute_J(VectorField & B, VectorField & J, ScalarField & T, MagCoeffs & mC, size_t N_GC, const Domain & dm, const Process & process)
 {
     double Deltatheta = dm.Deltatheta;
-    double m1_r, m2_r, m4_r; //magnetization-dependent prefactors for the curl(B), grad(B)xBhat and grad(T)xBhat terms respectively evaluated at location of J_r
-    double m1_th, m2_th, m3_th, m4_th; //magnetization-dependent prefactors for the curl(B), grad(B)xBhat, grad(mu_e)xBhat and grad(T)xBhat terms respectively evaluated at location of J_theta
-    double m1_phi, m2_phi, m3_phi, m4_phi; //magnetization-dependent prefactors for the curl(B), grad(B)xBhat, grad(mu_e)xBhat and grad(T)xBhat terms respectively evaluated at location of J_phi
-    double gradrB, gradthB, gradrmu_e, gradrT, gradthT; //components of gradients of Bmag, mu_e and T
-    double gradrB_2, gradthB_2, gradrT_2, gradthT_2; //components of gradients of Bmag, mu_e and T. Used for computing value at lower left cell corners (location of J_phi^{i,j}). Don't need gradrmu_e_2 because mu is assumed spherically symmetric
     double r_imh, Deltar_n1, n_t_av, n_r_av;
 
     if(mC.quantization == true){
+        double m1_r, m2_r, m4_r; //magnetization-dependent prefactors for the curl(B), grad(B)xBhat and grad(T)xBhat terms respectively evaluated at location of J_r
+        double m1_th, m2_th, m3_th, m4_th; //magnetization-dependent prefactors for the curl(B), grad(B)xBhat, grad(mu_e)xBhat and grad(T)xBhat terms respectively evaluated at location of J_theta
+        double m1_phi, m2_phi, m3_phi, m4_phi; //magnetization-dependent prefactors for the curl(B), grad(B)xBhat, grad(mu_e)xBhat and grad(T)xBhat terms respectively evaluated at location of J_phi
+        double gradrB, gradthB, gradrmu_e, gradrT, gradthT; //components of gradients of Bmag, mu_e and T
+        double gradrB_2, gradthB_2, gradrT_2, gradthT_2; //components of gradients of Bmag, mu_e and T. Used for computing value at lower left cell corners (location of J_phi^{i,j}). Don't need gradrmu_e_2 because mu is assumed spherically symmetric
         double J_B_r, J_B_theta, J_B_phi; //curl(B) components
         for(size_t i=N_GC; i<B.shape()[1]-N_GC; i++){
             r_imh = dm.r[i] - 0.5*dm.Deltar[i]; //r_{i-1/2}, location of cell boundary between cells i and i-1
@@ -59,7 +59,7 @@ void Compute_J(VectorField & B, VectorField & J, ScalarField & T, MagCoeffs & mC
             double MagFactor = 1.;
             for(size_t j=N_GC; j<B.shape()[2]-N_GC; j++){
 
-                if(mC.PolarAxisQuantization == true && ( dm.theta[j] - dm.Deltatheta < 0 || dm.theta[j] + dm.Deltatheta > pi )){
+                if(mC.SuppressPolarAxisQuantization == false && ( dm.theta[j] - dm.Deltatheta < 0 || dm.theta[j] + dm.Deltatheta > pi )){
                     MagFactor = 0.;
                 }
                 else MagFactor = 1.;
@@ -179,13 +179,12 @@ void Compute_J(VectorField & B, VectorField & J, ScalarField & T, MagCoeffs & mC
 void Compute_J_Poloidal(VectorField & B, VectorField & J, ScalarField & T, MagCoeffs & mC, size_t N_GC, const Domain & dm, const Process & process)
 {
     double Deltatheta = dm.Deltatheta;
-    double m1_r, m2_r, m4_r; //magnetization-dependent prefactors for the curl(B), grad(B)xBhat and grad(T)xBhat terms respectively evaluated at location of J_r
-    double m1_th, m2_th, m3_th, m4_th; //magnetization-dependent prefactors for the curl(B), grad(B)xBhat, grad(mu_e)xBhat and grad(T)xBhat terms respectively evaluated at location of J_th
-    double gradrB, gradthB, gradrmu_e, gradrT, gradthT; //components of gradients of Bmag, mu_e and T
-
     double r_imh, Deltar_n1, n_r_av;
 
     if(mC.quantization == true){
+        double m1_r, m2_r, m4_r; //magnetization-dependent prefactors for the curl(B), grad(B)xBhat and grad(T)xBhat terms respectively evaluated at location of J_r
+        double m1_th, m2_th, m3_th, m4_th; //magnetization-dependent prefactors for the curl(B), grad(B)xBhat, grad(mu_e)xBhat and grad(T)xBhat terms respectively evaluated at location of J_th
+        double gradrB, gradthB, gradrmu_e, gradrT, gradthT; //components of gradients of Bmag, mu_e and T
         double J_B_r, J_B_theta; //curl(B) components
         for(size_t i=N_GC; i<B.shape()[1]-N_GC; i++){
             r_imh = dm.r[i] - 0.5*dm.Deltar[i]; //r_{i-1/2}, location of cell boundary between cells i and i-1
@@ -196,7 +195,7 @@ void Compute_J_Poloidal(VectorField & B, VectorField & J, ScalarField & T, MagCo
             double MagFactor = 1.;
             for(size_t j=N_GC; j<B.shape()[2]-N_GC; j++){
 
-                if(mC.PolarAxisQuantization == true && ( dm.theta[j] - dm.Deltatheta < 0 || dm.theta[j] + dm.Deltatheta > pi )){
+                if(mC.SuppressPolarAxisQuantization == true && ( dm.theta[j] - dm.Deltatheta < 0 || dm.theta[j] + dm.Deltatheta > pi )){
                     MagFactor = 0.;
                 }
                 else MagFactor = 1.;
@@ -216,7 +215,6 @@ void Compute_J_Poloidal(VectorField & B, VectorField & J, ScalarField & T, MagCo
 
                 if( dm.theta[j] - 0.5*Deltatheta > 0 ){
                     J_B_r = dm.n_t[i]*( ( 1./tan(Deltatheta/2.) + 1./tan(dm.theta[j]-0.5*Deltatheta) )*B[2][i][j] - ( 1./tan(Deltatheta/2.) - 1./tan(dm.theta[j]-0.5*Deltatheta) )*B[2][i][j-1] )/(2.*dm.r[i]);
-                    // J_B_r = dm.n_t[i]*( 1./tan(Deltatheta/2.)*(B[2][i][j] - B[2][i][j-1]) + 1./tan(dm.theta[j]-0.5*Deltatheta)*(B[2][i][j] + B[2][i][j-1]) )/(2.*dm.r[i]);
                 }
                 else{
                     //if theta = 0, pi, set Jacobian-dependent term equal to zero, since Bphi vanishes at this boundary. Avoids 1/tan(0) error.
@@ -252,7 +250,6 @@ void Compute_J_Poloidal(VectorField & B, VectorField & J, ScalarField & T, MagCo
 
                 if( dm.theta[j] - 0.5*Deltatheta > 0 ){
                     J[0][i][j] = dm.n_t[i]*( ( 1./tan(Deltatheta/2.) + 1./tan(dm.theta[j]-0.5*Deltatheta) )*B[2][i][j] - ( 1./tan(Deltatheta/2.) - 1./tan(dm.theta[j]-0.5*Deltatheta) )*B[2][i][j-1] )/(2.*dm.r[i]);
-                    // J[0][i][j] = dm.n_t[i]*( 1./tan(Deltatheta/2.)*(B[2][i][j] - B[2][i][j-1]) + 1./tan(dm.theta[j]-0.5*Deltatheta)*(B[2][i][j] + B[2][i][j-1]) )/(2.*dm.r[i]);
                 }
                 else{
                     //if theta = 0, pi, use linear approximation to derivative (vanishing B_phi at these angles != vanishing J_r). This computes Jr for theta = 0
@@ -295,7 +292,7 @@ void Compute_J_Poloidal(VectorField & B, VectorField & J, ScalarField & T, MagCo
             process: Process objects containing information about the simulation domain and the current process
     Output: Qphi: update for Bphi
 */
-void B_torEvolve(ScalarField & Qphi, ScalarField & q_SH, VectorField & B, VectorField & J, ScalarField & T, TransCoeffs & tC, MagCoeffs & mC, size_t N_GC, const Domain & dm, const Process & process)
+void B_torEvolve(ScalarField & Qphi, VectorField & B, VectorField & J, ScalarField & T, TransCoeffs & tC, MagCoeffs & mC, size_t N_GC, const Domain & dm, const Process & process)
 {
     double Deltatheta = dm.Deltatheta;
     double Fr, Ftheta; //flux difference function in r and theta directions and cross term
@@ -308,12 +305,10 @@ void B_torEvolve(ScalarField & Qphi, ScalarField & q_SH, VectorField & B, Vector
     double sigma_im1, sigma_i, sigma_ip1, sigma_jm1, sigma_j, sigma_jp1;
     double B_im1, B_im, B_ip, B_ip1;
     double B_jm1, B_jm, B_jp, B_jp1;
-    double s_r_f, s_r_b, s_theta_f, s_theta_b;
     double s_r_f_p, s_r_f_m, s_r_b_p, s_r_b_m, s_theta_f_p, s_theta_f_m, s_theta_b_p, s_theta_b_m;
     double eta_O_th_ip1, eta_O_th_im1, eta_O_r_jp1, eta_O_r_jm1;
     double eta_O_perp_th_ip1, eta_O_perp_th_im1, eta_O_perp_r_jp1, eta_O_perp_r_jm1;
     double eta_O_delta_th_ip1, eta_O_delta_th_im1, eta_O_delta_r_jp1, eta_O_delta_r_jm1;
-    double vphi_r_b, vphi_r_f, vphi_theta_b, vphi_theta_f;
     double Delta2, eta_hyp, EdgeLimit;
     double lapBphi_im1, lapBphi, lapBphi_ip1, lapBphi_jm1, lapBphi_jp1;
 
@@ -404,40 +399,6 @@ void B_torEvolve(ScalarField & Qphi, ScalarField & q_SH, VectorField & B, Vector
             B_jm = B[2][i][j] - Delta_xitheta_j_m1*sigma_j;
             B_jp = B[2][i][j] + Delta_xitheta_j_p1*sigma_j;
             B_jp1 = B[2][i][j+1] - Delta_xitheta_jp1_m1*sigma_jp1;
-
-            //Local propagation speeds at cell boundaries according to Kurganov, Noelle and Petrova, SIAM J. Sci. Comput. 23, 707-740 (2001) Eq. (3.14-3.15)
-            // s_r_b_p = std::max( {beta_r_m1*B_im1, beta_r*B_im, 0.} );
-            // s_r_b_m = std::min( {beta_r_m1*B_im1, beta_r*B_im, 0.} );
-            // s_r_f_p = std::max( {beta_r*B_ip, beta_r_p1*B_ip1, 0.} );
-            // s_r_f_m = std::min( {beta_r*B_ip, beta_r_p1*B_ip1, 0.} );
-            //
-            // s_theta_b_p = std::max( {beta_theta_m1*B_jm1, beta_theta*B_jm, 0.} );
-            // s_theta_b_m = std::min( {beta_theta_m1*B_jm1, beta_theta*B_jm, 0.} );
-            // s_theta_f_p = std::max( {beta_theta*B_jp, beta_theta_p1*B_jp1, 0.} );
-            // s_theta_f_m = std::min( {beta_theta*B_jp, beta_theta_p1*B_jp1, 0.} );
-            //
-            // E_theta_HB_imh = ( s_r_b_p*beta_r_m1*B_im1*B_im1/2. - s_r_b_m*beta_r*B_im*B_im/2. + s_r_b_p*s_r_b_m*( B_im - B_im1 ) )/(s_r_b_p - s_r_b_m);
-            // E_theta_HB_iph = ( s_r_f_p*beta_r*B_ip*B_ip/2. - s_r_f_m*beta_r_p1*B_ip1*B_ip1/2. + s_r_f_p*s_r_f_m*( B_ip1 - B_ip ) )/(s_r_f_p - s_r_f_m);
-            // Fr += r_iph*E_theta_HB_iph - r_imh*E_theta_HB_imh;
-            //
-            // E_r_HB_jmh = -( s_theta_b_p*beta_theta_m1*B_jm1*B_jm1/2. - s_theta_b_m*beta_theta*B_jm*B_jm/2. + s_theta_b_p*s_theta_b_m*( B_jm - B_jm1 ) )/(s_theta_b_p - s_theta_b_m);
-            // E_r_HB_jph = -( s_theta_f_p*beta_theta*B_jp*B_jp/2. - s_theta_f_m*beta_theta_p1*B_jp1*B_jp1/2. + s_theta_f_p*s_theta_f_m*( B_jp1 - B_jp ) )/(s_theta_f_p - s_theta_f_m);
-            // Ftheta += -( E_r_HB_jph - E_r_HB_jmh);
-
-            //KT central scheme
-            // s_r_b = std::max( abs(beta_r_m1*B_im1), abs(beta_r*B_im) );
-            // s_r_f = std::max( abs(beta_r*B_ip), abs(beta_r_p1*B_ip1) );
-            //
-            // s_theta_b = std::max( abs(beta_theta_m1*B_jm1), abs(beta_theta*B_jm) );
-            // s_theta_f = std::max( abs(beta_theta*B_jp), abs(beta_theta_p1*B_jp1) );
-            //
-            // E_theta_HB_imh = 1./2.*( beta_r*B_im*B_im/2. + beta_r_m1*B_im1*B_im1/2. - s_r_b*( B_im - B_im1 ) );
-            // E_theta_HB_iph = 1./2.*( beta_r_p1*B_ip1*B_ip1/2. + beta_r*B_ip*B_ip/2. - s_r_f*( B_ip1 - B_ip ) );
-            // Fr += r_iph*E_theta_HB_iph - r_imh*E_theta_HB_imh;
-            //
-            // E_r_HB_jmh = -1./2.*( beta_theta*B_jm*B_jm/2. + beta_theta_m1*B_jm1*B_jm1/2. - s_theta_b*( B_jm - B_jm1 ) );
-            // E_r_HB_jph = -1./2.*( beta_theta_p1*B_jp1*B_jp1/2. + beta_theta*B_jp*B_jp/2. - s_theta_f*( B_jp1 - B_jp ) );
-            // Ftheta += -( E_r_HB_jph - E_r_HB_jmh);
 
             //Godunov method with MC reconstruction
             s_r_b_p = beta_r_m1*B_im1;
@@ -594,25 +555,10 @@ void B_torEvolve(ScalarField & Qphi, ScalarField & q_SH, VectorField & B, Vector
             Ftheta += -( E_r_f - E_r_b );
 
             //Quantities at location of J_phi
-            // eta_H_corner_lb = 2.*( dm.Deltar[i]+dm.Deltar[i-1] )/( dm.Deltar[i]*( 1./tC.eta_H[i][j] + 1./tC.eta_H[i][j-1] ) + dm.Deltar[i-1]*( 1./tC.eta_H[i-1][j] + 1./tC.eta_H[i-1][j-1] ) );
-            // eta_H_corner_lt = 2.*( dm.Deltar[i+1]+dm.Deltar[i] )/( dm.Deltar[i+1]*( 1./tC.eta_H[i+1][j] + 1./tC.eta_H[i+1][j-1] ) + dm.Deltar[i]*( 1./tC.eta_H[i][j] + 1./tC.eta_H[i][j-1] ) );
-            // eta_H_corner_rb = 2.*( dm.Deltar[i]+dm.Deltar[i-1] )/( dm.Deltar[i]*( 1./tC.eta_H[i][j+1] + 1./tC.eta_H[i][j] ) + dm.Deltar[i-1]*( 1./tC.eta_H[i-1][j+1] + 1./tC.eta_H[i-1][j] ) );
-            // eta_H_corner_rt = 2.*( dm.Deltar[i+1]+dm.Deltar[i] )/( dm.Deltar[i+1]*( 1./tC.eta_H[i+1][j+1] + 1./tC.eta_H[i+1][j] ) + dm.Deltar[i]*( 1./tC.eta_H[i][j+1] + 1./tC.eta_H[i][j] ) );
-            // vphi_phi_lb = -eta_H_corner_lb*J[2][i][j];
-            // vphi_phi_lt = -eta_H_corner_lt*J[2][i+1][j];
-            // vphi_phi_rb = -eta_H_corner_rb*J[2][i][j+1];
-            // vphi_phi_rt = -eta_H_corner_rt*J[2][i+1][j+1];
-            // vphi_r_b = 0.5*( vphi_phi_lb + vphi_phi_rb );
-            // vphi_r_f = 0.5*( vphi_phi_lt + vphi_phi_rt );
-            // vphi_theta_b = 0.5*( vphi_phi_lb + vphi_phi_lt );
-            // vphi_theta_f = 0.5*( vphi_phi_rb + vphi_phi_rt );
-            // Fr += ( r_iph*(-vphi_r_f*B[0][i+1][j]) - r_imh*(-vphi_r_b*B[0][i][j]) );
-            // Ftheta += ( (-vphi_theta_f*B[1][i][j+1]) - (-vphi_theta_b*B[1][i][j]) );
-
-            mC.E_H_Pol[0][i][j] = E_r_HB_jmh + E_r_HB_mag_jph;//*EdgeLimit - (-vphi_theta_b*B[1][i][j])*( 1. - EdgeLimit );
-            mC.E_H_Pol[1][i][j] = E_theta_HB_imh + E_theta_HB_mag_imh;//*EdgeLimit + (-vphi_r_b*B[0][i][j])*( 1. - EdgeLimit );
-            mC.E_H_Pol[0][i][j+1] = E_r_HB_jph + E_r_HB_mag_jph;//*EdgeLimit - (-vphi_theta_f*B[1][i][j+1])*( 1. - EdgeLimit );
-            mC.E_H_Pol[1][i+1][j] = E_theta_HB_iph + E_theta_HB_mag_iph;//*EdgeLimit + (-vphi_r_f*B[0][i+1][j])*( 1. - EdgeLimit );
+            mC.E_H_Pol[0][i][j] = E_r_HB_jmh + E_r_HB_mag_jph;
+            mC.E_H_Pol[1][i][j] = E_theta_HB_imh + E_theta_HB_mag_imh;
+            mC.E_H_Pol[0][i][j+1] = E_r_HB_jph + E_r_HB_mag_jph;
+            mC.E_H_Pol[1][i+1][j] = E_theta_HB_iph + E_theta_HB_mag_iph;
 
             lapBphi = 1./dm.n_r[i]/(dm.r[i]*dm.r[i])*( 2.*pow(r_iph,2.)/(dm.n_r[i+1]+dm.n_r[i])*(B[2][i+1][j]*dm.n_t[i+1]-B[2][i][j]*dm.n_t[i])/(0.5*dm.Deltar[i+1]+0.5*dm.Deltar[i])
                                                         - 2.*pow(r_imh,2.)/(dm.n_r[i]+dm.n_r[i-1])*(B[2][i][j]*dm.n_t[i]-B[2][i-1][j]*dm.n_t[i-1])/(0.5*dm.Deltar[i]+0.5*dm.Deltar[i-1]) )/dm.Deltar[i]
@@ -644,8 +590,7 @@ void B_torEvolve(ScalarField & Qphi, ScalarField & q_SH, VectorField & B, Vector
                                                         - 2.*pow(r_imh,2.)/(dm.n_r[i]+dm.n_r[i-1])*(B[2][i][j]*dm.n_t[i]-B[2][i-1][j]*dm.n_t[i-1])/(0.5*dm.Deltar[i]+0.5*dm.Deltar[i-1]) )/dm.Deltar[i]
                             + dm.n_t[i]/(dm.r[i]*dm.r[i]*Deltatheta)*( (B[2][i][j+2]-B[2][i][j+1])/Deltatheta - (B[2][i][j+1]-B[2][i][j])/Deltatheta + (B[2][i][j+2]-B[2][i][j])/(2.*tan(dm.theta[j+1])) );
 
-            //Hyperdiffusion term
-            // eta_hyp = tC.C_hyp*Delta2*tC.eta_H[i][j]*OuterEdgeLimiter(dm.r[i],dm.r_max,dm.r_max/1000.);
+            //Hyperdiffusion term. Applied to edges of simulation domain.
             eta_hyp = tC.C_hyp*Delta2*tC.eta_H[i][j]*EdgeLimiter(dm.r[i],dm.r_max,dm.r_min,dm.r_max/100.)*PoleEdgeLimiter(dm.theta[j],pi/180.);
             Fr += eta_hyp*1./dm.n_r[i]*( ( (dm.r[i]+dm.Deltar[i])*lapBphi_ip1 - dm.r[i]*lapBphi)/(0.5*(dm.Deltar[i+1]+dm.Deltar[i]))
                                                                         - (dm.r[i]*lapBphi - (dm.r[i]-dm.Deltar[i])*lapBphi_im1)/(0.5*(dm.Deltar[i]+dm.Deltar[i-1])) );
@@ -691,11 +636,6 @@ void B_torEvolve(ScalarField & Qphi, ScalarField & q_SH, VectorField & B, Vector
                                 + ( eta_O_r_jp1*J[0][i][j+1] - eta_O_r_jm1*J[0][i][j] )/(dm.r[i]*Deltatheta);
 
             }
-            q_SH[i][j] = 0*( - 0.5*(beta_r + beta_r_m1)/(96.*pi)*0.5*(dm.n_t[i]+dm.n_t[i-1])*pow(B_im - B_im1,3.)*4.*pi*r_imh*r_imh*sin(dm.theta[j])*sin(0.5*Deltatheta)*step( -(beta_r + beta_r_m1)*(B_im-B_im1) )
-                         - 0.5*(beta_r_p1 + beta_r)/(96.*pi)*0.5*(dm.n_t[i+1]+dm.n_t[i])*pow(B_ip1 - B_ip,3.)*4.*pi*r_iph*r_iph*sin(dm.theta[j])*sin(0.5*Deltatheta)*step( -(beta_r_p1 + beta_r)*(B_ip1-B_ip) )
-                         - 0.5*(beta_theta + beta_theta_m1)/(96.*pi)*dm.n_t[i]*pow(B_jm - B_jm1,3.)*2.*pi*sin(dm.theta[j]-0.5*Deltatheta)*dm.r[i]*dm.Deltar[i]*dm.n_r[i]*step( -(beta_theta + beta_theta_m1)*(B_jm-B_jm1) )
-                         - 0.5*(beta_theta_p1 + beta_theta)/(96.*pi)*dm.n_t[i]*pow(B_jp1 - B_jp,3.)*2.*pi*sin(dm.theta[j]+0.5*Deltatheta)*dm.r[i]*dm.Deltar[i]*dm.n_r[i]*step( -(beta_theta_p1 + beta_theta)*(B_jp1-B_jp) ) );
-
         }
     }
 
@@ -985,9 +925,9 @@ void Compute_E(VectorField & B, VectorField & Bn, VectorField & phE, VectorField
                     phE[1][i][j] = eta_O_corner_perp*Jtheta_av_phi - ( vphi_av_phi*Br_up_phi - vr_av_phi*Bphi_phi );
                     phE[2][i][j] = eta_O_corner_perp*J[2][i][j] - ( vr_av_phi*Btheta_up_phi - vtheta_av_phi*Br_up_phi );
 
-                    cE[0][i][j] = eta_O_corner_perp*Jr_av_c - ( vtheta_av_c*Bphi_phi - vphi_av_c*Btheta_up_phi );
-                    cE[1][i][j] = eta_O_corner_perp*Jtheta_av_c - ( vphi_av_c*Br_up_phi - vr_av_c*Bphi_phi );
-                    cE[2][i][j] = - ( vr_av_c*Btheta_up_phi - vtheta_av_c*Br_up_phi );
+                    cE[0][i][j] = eta_O_corner_perp*Jr_av_c - 0*( vtheta_av_c*Bphi_phi - vphi_av_c*Btheta_up_phi );
+                    cE[1][i][j] = eta_O_corner_perp*Jtheta_av_c - 0*( vphi_av_c*Br_up_phi - vr_av_c*Bphi_phi );
+                    cE[2][i][j] = - 0*( vr_av_c*Btheta_up_phi - vtheta_av_c*Br_up_phi );
                 }
             }
             else {
@@ -997,9 +937,9 @@ void Compute_E(VectorField & B, VectorField & Bn, VectorField & phE, VectorField
                 phE[1][i][j] = eta_O_corner*Jtheta_av_phi - ( vphi_av_phi*Br_up_phi - vr_av_phi*Bphi_phi );
                 phE[2][i][j] = eta_O_corner*J[2][i][j] - ( vr_av_phi*Btheta_up_phi - vtheta_av_phi*Br_up_phi );
 
-                cE[0][i][j] = eta_O_corner*Jr_av_c - ( vtheta_av_c*Bphi_phi - vphi_av_c*Btheta_up_phi );
-                cE[1][i][j] = eta_O_corner*Jtheta_av_c - ( vphi_av_c*Br_up_phi - vr_av_c*Bphi_phi );
-                cE[2][i][j] = - ( vr_av_c*Btheta_up_phi - vtheta_av_c*Br_up_phi );
+                cE[0][i][j] = eta_O_corner*Jr_av_c - 0*( vtheta_av_c*Bphi_phi - vphi_av_c*Btheta_up_phi );
+                cE[1][i][j] = eta_O_corner*Jtheta_av_c - 0*( vphi_av_c*Br_up_phi - vr_av_c*Bphi_phi );
+                cE[2][i][j] = - 0*( vr_av_c*Btheta_up_phi - vtheta_av_c*Br_up_phi );
             }
         }
     }
@@ -1150,7 +1090,7 @@ void Compute_q(ScalarField & T, VectorField & q, TransCoeffs & trC, MagCoeffs & 
             dm: Domain object containing information about the simulation domain
     Output: QT: update for T
 */
-void TEvolve(ScalarField & QT, ScalarField & T, VectorField & q, VectorField & J, VectorField & phE, VectorField & cE, ScalarField & q_SH, TransCoeffs & trC, ThermCoeffs & thC, TParams & tparams, size_t N_GC, const Domain & dm)
+void TEvolve(ScalarField & QT, ScalarField & T, VectorField & q, VectorField & J, VectorField & phE, VectorField & cE, TransCoeffs & trC, ThermCoeffs & thC, TParams & tparams, size_t N_GC, const Domain & dm)
 {
     double Fr, Ftheta; //flux difference function in r and theta directions and cross term
     double r_iph, r_imh; //radial coordinate at upper and lower cell face
@@ -1172,7 +1112,7 @@ void TEvolve(ScalarField & QT, ScalarField & T, VectorField & q, VectorField & J
 
             //Divide by overall factor of c_v[i][j]
             QT[i][j] = ( -Fr/(dm.n_r[i]*dm.r[i]*dm.r[i]*dm.Deltar[i]) - Ftheta/(dm.r[i]*2.*sin(dm.theta[j])*sin(dm.Deltatheta/2.))
-                        + JH_pref*JH + 0*q_SH[i][j] + dm.n_t[i]*dm.n_t[i]*thC.q_nuCrust[i][j] )/thC.c_v[i][j];
+                        + JH_pref*JH + dm.n_t[i]*dm.n_t[i]*thC.q_nuCrust[i][j] )/thC.c_v[i][j];
         }
     }
 
@@ -1211,10 +1151,6 @@ double JouleHeating(size_t i, size_t j, VectorField & J, VectorField & phE, Vect
         JthEth_ph_ip1j= 0.5*( sin(dm.theta[j-1])*J[1][i+1][j-1] + sin(dm.theta[j])*J[1][i+1][j] )/sin(theta_m)*phE[1][i+1][j];
         JthEth_c_ij = 0.5*( sin(dm.theta[j])*J[1][i][j] - sin(dm.theta[j-1])*J[1][i][j-1] )/sin(theta_m)*cE[1][i][j];
         JthEth_c_ip1j = 0.5*( sin(dm.theta[j])*J[1][i+1][j] - sin(dm.theta[j-1])*J[1][i+1][j-1] )/sin(theta_m)*cE[1][i+1][j];
-        // JthEth_ph_ij = 0.5*( J[1][i][j-1] + J[1][i][j] )*phE[1][i][j];
-        // JthEth_ph_ip1j= 0.5*( J[1][i+1][j-1] + J[1][i+1][j] )*phE[1][i+1][j];
-        // JthEth_c_ij = 0.5*( J[1][i][j] - J[1][i][j-1] )*cE[1][i][j];
-        // JthEth_c_ip1j = 0.5*( J[1][i+1][j] - J[1][i+1][j-1] )*cE[1][i+1][j];
     }
     else{
         JthEth_ph_ij = 0.;
@@ -1228,10 +1164,6 @@ double JouleHeating(size_t i, size_t j, VectorField & J, VectorField & phE, Vect
         JthEth_ph_ip1jp1 = 0.5*( sin(dm.theta[j])*J[1][i+1][j] + sin(dm.theta[j+1])*J[1][i+1][j+1] )/sin(theta_p)*phE[1][i+1][j+1];
         JthEth_c_ijp1 = 0.5*( sin(dm.theta[j+1])*J[1][i][j+1] - sin(dm.theta[j])*J[1][i][j] )/sin(theta_p)*cE[1][i][j+1];
         JthEth_c_ip1jp1 = 0.5*( sin(dm.theta[j+1])*J[1][i+1][j+1] - sin(dm.theta[j])*J[1][i+1][j] )/sin(theta_p)*cE[1][i+1][j+1];
-        // JthEth_ph_ijp1 = 0.5*( J[1][i][j] + J[1][i][j+1] )*phE[1][i][j+1];
-        // JthEth_ph_ip1jp1 = 0.5*( J[1][i+1][j] + J[1][i+1][j+1] )*phE[1][i+1][j+1];
-        // JthEth_c_ijp1 = 0.5*( J[1][i][j+1] - J[1][i][j] )*cE[1][i][j+1];
-        // JthEth_c_ip1jp1 = 0.5*( J[1][i+1][j+1] - J[1][i+1][j] )*cE[1][i+1][j+1];
     }
     else{
         JthEth_ph_ijp1 = 0.;
@@ -1245,7 +1177,6 @@ double JouleHeating(size_t i, size_t j, VectorField & J, VectorField & phE, Vect
     JH_ph_lt = 0.5*( dm.r[i]*J[0][i][j] + dm.r[i+1]*J[0][i+1][j] )/r_p*phE[0][i+1][j] + JthEth_ph_ip1j + J[2][i+1][j]*phE[2][i+1][j];
     JH_ph_rt = 0.5*( dm.r[i]*J[0][i][j+1] + dm.r[i+1]*J[0][i+1][j+1] )/r_p*phE[0][i+1][j+1] + JthEth_ph_ip1jp1 + J[2][i+1][j+1]*phE[2][i+1][j+1];
 
-    // JH_ph = ( JH_ph_lb + JH_ph_rb + JH_ph_lt + JH_ph_rt )/4.;
     JH_ph = ( JH_ph_lb*lb_int + JH_ph_rb*rb_int + JH_ph_lt*lt_int + JH_ph_rt*rt_int )/Vij;
 
     JH_c_lb = 0.5*( dm.r[i]*J[0][i][j] - dm.r[i-1]*J[0][i-1][j] )/r_m*cE[0][i][j] + JthEth_c_ij;
@@ -1253,7 +1184,6 @@ double JouleHeating(size_t i, size_t j, VectorField & J, VectorField & phE, Vect
     JH_c_lt = 0.5*( dm.r[i+1]*J[0][i+1][j] - dm.r[i]*J[0][i][j] )/r_p*cE[0][i+1][j] + JthEth_c_ip1j;
     JH_c_rt = 0.5*( dm.r[i+1]*J[0][i+1][j+1] - dm.r[i]*J[0][i][j+1] )/r_p*cE[0][i+1][j+1] + JthEth_c_ip1jp1;
 
-    // JH_c = ( JH_c_lb + JH_c_rb + JH_c_lt + JH_c_rt )/4.;
     JH_c = ( JH_c_lb*lb_int + JH_c_rb*rb_int + JH_c_lt*lt_int + JH_c_rt*rt_int )/Vij;
 
     return JH_ph + JH_c;
@@ -1269,15 +1199,11 @@ double JouleHeating(size_t i, size_t j, VectorField & J, VectorField & phE, Vect
 double QuasiJouleHeating(size_t i, size_t j, VectorField & J_B, VectorField & phE, VectorField & cE, TransCoeffs & tC, MagCoeffs & mC, const Domain & dm)
 {
     double JthEth_ph_ij, JthEth_ph_ip1j, JthEth_ph_ijp1, JthEth_ph_ip1jp1; //J_theta*E_theta evaluated at locations of J_phi
-    double JthEthH_ph_ij, JthEthH_ph_ip1j, JthEthH_ph_ijp1, JthEthH_ph_ip1jp1; //J_theta*E_theta_H evaluated at locations of J_phi
     double JthEth_c_ij, JthEth_c_ip1j, JthEth_c_ijp1, JthEth_c_ip1jp1; //conjugate J_theta*E_theta evaluated at locations of J_phi
     double QuasiJH_ph, QuasiJH_c; //quasi-Joule heating density contributions at location of currents in r, theta, phi-directions respectively
 
-    double JrErH_ph_ij, JrErH_ph_ip1j, JrErH_ph_ijp1, JrErH_ph_ip1jp1; //J_r*E_r_H evaluated at locations of J_phi
     double JH_ph_lb, JH_ph_rb, JH_ph_lt, JH_ph_rt;
     double JH_c_lb, JH_c_rb, JH_c_lt, JH_c_rt;
-    double JrEr_l, JrEr_r; //difference between J_r*E_r_H at location of J_r and the sum of half its value at each of the neighbouring J_phi locations
-    double JthEth_b, JthEth_t; //difference between J_theta*E_theta_H at location of J_theta and the sum of half its value at each of the neighbouring J_phi locations
 
     double r_m = dm.r[i] - 0.5*dm.Deltar[i], r_p = dm.r[i] + 0.5*dm.Deltar[i];
     double theta_m = dm.theta[j] - 0.5*dm.Deltatheta, theta_p = dm.theta[j] + 0.5*dm.Deltatheta;
@@ -1295,16 +1221,12 @@ double QuasiJouleHeating(size_t i, size_t j, VectorField & J_B, VectorField & ph
         JthEth_ph_ip1j= 0.5*( sin(dm.theta[j-1])*J_B[1][i+1][j-1] + sin(dm.theta[j])*J_B[1][i+1][j] )/sin(theta_m)*phE[1][i+1][j];
         JthEth_c_ij = 0.5*( sin(dm.theta[j])*J_B[1][i][j] - sin(dm.theta[j-1])*J_B[1][i][j-1] )/sin(theta_m)*cE[1][i][j];
         JthEth_c_ip1j = 0.5*( sin(dm.theta[j])*J_B[1][i+1][j] - sin(dm.theta[j-1])*J_B[1][i+1][j-1] )/sin(theta_m)*cE[1][i+1][j];
-        JthEthH_ph_ij = 0.5*( sin(dm.theta[j-1])*J_B[1][i][j-1] + sin(dm.theta[j])*J_B[1][i][j] )/sin(theta_m)*mC.phE_H[1][i][j];
-        JthEthH_ph_ip1j = 0.5*( sin(dm.theta[j-1])*J_B[1][i+1][j-1] + sin(dm.theta[j])*J_B[1][i+1][j] )/sin(theta_m)*mC.phE_H[1][i+1][j];
     }
     else{
         JthEth_ph_ij = 0.;
         JthEth_ph_ip1j = 0.;
         JthEth_c_ij = 0.;
         JthEth_c_ip1j = 0.;
-        JthEthH_ph_ij = 0.;
-        JthEthH_ph_ip1j = 0.;
     }
 
     if( dm.theta[j]+0.5*dm.Deltatheta + 1e-9 < pi ){
@@ -1312,16 +1234,12 @@ double QuasiJouleHeating(size_t i, size_t j, VectorField & J_B, VectorField & ph
         JthEth_ph_ip1jp1 = 0.5*( sin(dm.theta[j])*J_B[1][i+1][j] + sin(dm.theta[j+1])*J_B[1][i+1][j+1]) /sin(theta_p)*phE[1][i+1][j+1];
         JthEth_c_ijp1 = 0.5*( sin(dm.theta[j+1])*J_B[1][i][j+1] - sin(dm.theta[j])*J_B[1][i][j] )/sin(theta_p)*cE[1][i][j+1];
         JthEth_c_ip1jp1 = 0.5*( sin(dm.theta[j+1])*J_B[1][i+1][j+1] - sin(dm.theta[j])*J_B[1][i+1][j] )/sin(theta_p)*cE[1][i+1][j+1];
-        JthEthH_ph_ijp1 = 0.5*( sin(dm.theta[j])*J_B[1][i][j] + sin(dm.theta[j+1])*J_B[1][i][j+1] )/sin(theta_p)*mC.phE_H[1][i][j+1];
-        JthEthH_ph_ip1jp1 = 0.5*( sin(dm.theta[j])*J_B[1][i+1][j] + sin(dm.theta[j+1])*J_B[1][i+1][j+1] )/sin(theta_p)*mC.phE_H[1][i+1][j+1];
     }
     else{
         JthEth_ph_ijp1 = 0.;
         JthEth_ph_ip1jp1 = 0.;
         JthEth_c_ijp1 = 0.;
         JthEth_c_ip1jp1 = 0.;
-        JthEthH_ph_ijp1 = 0.;
-        JthEthH_ph_ip1jp1 = 0.;
     }
 
     JH_ph_lb = 0.5*( dm.r[i-1]*J_B[0][i-1][j] + dm.r[i]*J_B[0][i][j] )/r_m*phE[0][i][j] + JthEth_ph_ij + J_B[2][i][j]*phE[2][i][j];
@@ -1329,26 +1247,13 @@ double QuasiJouleHeating(size_t i, size_t j, VectorField & J_B, VectorField & ph
     JH_ph_lt = 0.5*( dm.r[i]*J_B[0][i][j] + dm.r[i+1]*J_B[0][i+1][j] )/r_p*phE[0][i+1][j] + JthEth_ph_ip1j + J_B[2][i+1][j]*phE[2][i+1][j];
     JH_ph_rt = 0.5*( dm.r[i]*J_B[0][i][j+1] + dm.r[i+1]*J_B[0][i+1][j+1] )/r_p*phE[0][i+1][j+1] + JthEth_ph_ip1jp1 + J_B[2][i+1][j+1]*phE[2][i+1][j+1];
 
-    JrErH_ph_ij = 0.5*( dm.r[i-1]*J_B[0][i-1][j] + dm.r[i]*J_B[0][i][j] )/r_m*mC.phE_H[0][i][j];
-    JrErH_ph_ijp1 = 0.5*( dm.r[i-1]*J_B[0][i-1][j+1] + dm.r[i]*J_B[0][i][j+1] )/r_m*mC.phE_H[0][i][j+1];
-    JrErH_ph_ip1j = 0.5*( dm.r[i]*J_B[0][i][j] + dm.r[i+1]*J_B[0][i+1][j] )/r_p*mC.phE_H[0][i+1][j];
-    JrErH_ph_ip1jp1 = 0.5*( dm.r[i]*J_B[0][i][j+1] + dm.r[i+1]*J_B[0][i+1][j+1] )/r_p*mC.phE_H[0][i+1][j+1];
-
-    JrEr_l = J_B[0][i][j]*mC.E_H_Pol[0][i][j] - 0.5*( JrErH_ph_ij + JrErH_ph_ip1j );
-    JrEr_r = J_B[0][i][j+1]*mC.E_H_Pol[0][i][j+1] - 0.5*( JrErH_ph_ijp1 + JrErH_ph_ip1jp1 );
-
-    JthEth_b = J_B[1][i][j]*mC.E_H_Pol[1][i][j] - 0.5*( JthEthH_ph_ij + JthEthH_ph_ijp1 );
-    JthEth_t = J_B[1][i+1][j]*mC.E_H_Pol[1][i+1][j] - 0.5*( JthEthH_ph_ip1j + JthEthH_ph_ip1jp1 );
-
-    // QuasiJH_ph = ( JH_ph_lb + JH_ph_rb + JH_ph_lt + JH_ph_rt )/4.;// + ( JrEr_l + JrEr_r + JthEth_b + JthEth_t )/2.;
-    QuasiJH_ph = ( JH_ph_lb*lb_int + JH_ph_rb*rb_int + JH_ph_lt*lt_int + JH_ph_rt*rt_int )/Vij;// + ( JrEr_l + JrEr_r + JthEth_b + JthEth_t )/2.;
+    QuasiJH_ph = ( JH_ph_lb*lb_int + JH_ph_rb*rb_int + JH_ph_lt*lt_int + JH_ph_rt*rt_int )/Vij;
 
     JH_c_lb = 0.5*( dm.r[i]*J_B[0][i][j] - dm.r[i-1]*J_B[0][i-1][j] )/r_m*cE[0][i][j] + JthEth_c_ij;
     JH_c_rb = 0.5*( dm.r[i]*J_B[0][i][j+1] - dm.r[i-1]*J_B[0][i-1][j+1] )/r_m*cE[0][i][j+1] + JthEth_c_ijp1;
     JH_c_lt = 0.5*( dm.r[i+1]*J_B[0][i+1][j] - dm.r[i]*J_B[0][i][j] )/r_p*cE[0][i+1][j] + JthEth_c_ip1j;
     JH_c_rt = 0.5*( dm.r[i+1]*J_B[0][i+1][j+1] - dm.r[i]*J_B[0][i][j+1] )/r_p*cE[0][i+1][j+1] + JthEth_c_ip1jp1;
 
-    // QuasiJH_c = ( JH_c_lb + JH_c_rb + JH_c_lt + JH_c_rt )/4.;
     QuasiJH_c = ( JH_c_lb*lb_int + JH_c_rb*rb_int + JH_c_lt*lt_int + JH_c_rt*rt_int )/Vij;
 
     return QuasiJH_ph + QuasiJH_c;
@@ -1561,7 +1466,7 @@ double TCoreEvolveImplicit(ScalarField & T, double Tcore, double Tcore_star, Tra
             a_ijIm: off-diagonal entries in Butcher tableaux for this implicit RK step
     Output: Tstar: IMEX-intermediate auxiliary redshifted temperature in reduced units
 */
-void Compute_Tstar_IMEX(ScalarField & Tstar, ScalarField & T_init, ScalarField & T, VectorField & q, VectorField & J, VectorField & phE, VectorField & cE, ScalarField & q_SH,
+void Compute_Tstar_IMEX(ScalarField & Tstar, ScalarField & T_init, ScalarField & T, VectorField & q, VectorField & J, VectorField & phE, VectorField & cE,
     ThermCoeffs & thC, TransCoeffs & trC, MagCoeffs & mC, TParams & tparams, size_t N_GC, const Domain & dm, const Process & process, double a_ijIm)
 {
     static double JH_pref = tparams.JouleHeating*B_0*B_0/(4.*pi*T_0*s_0); //prefactor to de-dimensionalize Joule heating term
@@ -1667,7 +1572,7 @@ void Compute_Tstar_IMEX(ScalarField & Tstar, ScalarField & T_init, ScalarField &
             JH = JouleHeating(i,j,J,phE,cE,trC,dm);
 
             Tstar[i][j] = T_init[i][j] + dm.Deltat*a_ijIm*( -Fr/(dm.n_r[i]*dm.r[i]*dm.r[i]*dm.Deltar[i]) - Ftheta/(dm.r[i]*2.*sin(dm.theta[j])*sin(dm.Deltatheta/2.))
-                                                            + JH_pref*JH + 0*q_SH[i][j] + dm.n_t[i]*dm.n_t[i]*thC.q_nuCrust[i][j] )/thC.c_v[i][j];
+                                                            + JH_pref*JH + dm.n_t[i]*dm.n_t[i]*thC.q_nuCrust[i][j] )/thC.c_v[i][j];
         }
     }
 
@@ -1689,7 +1594,7 @@ void Compute_Tstar_IMEX(ScalarField & Tstar, ScalarField & T_init, ScalarField &
             process: Process object containing information about the current process
     Output: KT: explicit ADI-split part of stiff update
 */
-void Compute_KT_IMEX(ScalarField & KT, ScalarField & T, VectorField & q, VectorField & J, VectorField & phE, VectorField & cE, ScalarField & q_SH,
+void Compute_KT_IMEX(ScalarField & KT, ScalarField & T, VectorField & q, VectorField & J, VectorField & phE, VectorField & cE,
                     TransCoeffs & trC, ThermCoeffs & thC, MagCoeffs & mC, TParams & tparams, size_t N_GC, const Domain & dm, const Process & process)
 {
     static double JH_pref = tparams.JouleHeating*B_0*B_0/(4.*pi*T_0*s_0); //prefactor to de-dimensionalize Joule heating term
@@ -1791,7 +1696,7 @@ void Compute_KT_IMEX(ScalarField & KT, ScalarField & T, VectorField & q, VectorF
 
             //Divide by overall factor of c_v[i][j]
             KT[i][j] = ( -Fr/(dm.n_r[i]*dm.r[i]*dm.r[i]*dm.Deltar[i]) - Ftheta/(dm.r[i]*2.*sin(dm.theta[j])*sin(dm.Deltatheta/2.))
-                        + JH_pref*JH + 0*q_SH[i][j] + dm.n_t[i]*dm.n_t[i]*thC.q_nuCrust[i][j] )/thC.c_v[i][j];
+                        + JH_pref*JH + dm.n_t[i]*dm.n_t[i]*thC.q_nuCrust[i][j] )/thC.c_v[i][j];
         }
     }
 

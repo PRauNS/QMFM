@@ -7,6 +7,7 @@
 #include <string>
 #include <mpi.h>
 #include <H5Cpp.h>
+
 #ifndef H5_NO_NAMESPACE
     using namespace H5;
 #endif
@@ -91,12 +92,14 @@ void load_params(SimParams & params, BParams & Bparams, TParams & Tparams, Condu
             params.CrustEOS = values[j];
 
             // Fill EOS parameter of Cparams
-            unsigned int resBSk24 = values[j].find(subBSk24);
-            unsigned int resSLy4 = values[j].find(subSLy4);
-            if(resBSk24 != std::string::npos)
+            std::string::size_type resBSk24 = values[j].find(subBSk24);
+            std::string::size_type resSLy4 = values[j].find(subSLy4);
+            if(resBSk24 != std::string::npos) {
                 Cparams.EOS = subBSk24;
-            else if(resSLy4 != std::string::npos)
+            }
+            else if(resSLy4 != std::string::npos) {
                 Cparams.EOS = subSLy4;
+            }
             else{
                 if(world_rank == 0) std::cout << "USING UNRECOGNIZED CRUST EOS!";
             }
@@ -156,6 +159,10 @@ void load_params(SimParams & params, BParams & Bparams, TParams & Tparams, Condu
             else params.divBCheck = false;
         }
 
+        if(labels[j] == "B_field_type"){
+            Bparams.B_field_type = values[j];
+            if(world_rank == 0) std::cout << "Using a " << Bparams.B_field_type << " magnetic field configuration" << std::endl;
+        }
         if(labels[j] == "B_pol_init"){
             Bparams.B_pol_init = stod(values[j])/B_0; //Converts from G to reduced units
             if(world_rank == 0) std::cout << "Initial poloidal magnetic field: dipole with " << Bparams.B_pol_init*B_0 << " G at poles" << std::endl;
@@ -262,12 +269,12 @@ void load_params(SimParams & params, BParams & Bparams, TParams & Tparams, Condu
         }
 
         //Whether to include Landau quantization effects in current at polar axis (true) or not (false)
-        if(labels[j] == "PolarAxisQuantization"){
+        if(labels[j] == "SuppressPolarAxisQuantization"){
             if(values[j] == "true"){
-                Bparams.PolarAxisQuantization = true;
+                Bparams.SuppressPolarAxisQuantization = true;
             }
             else{
-                Bparams.PolarAxisQuantization = false;
+                Bparams.SuppressPolarAxisQuantization = false;
             }
         }
 
@@ -439,7 +446,7 @@ void MPE_Decomp1D( size_t N, int num_procs, int MyID, size_t &s, size_t &e )
       nlocal = nlocal;
     }
     e = s + nlocal;
-    if( (e > N) || (MyID == num_procs-1)){
+    if( e > N || MyID == num_procs-1 ){
      e = N;
     }
 
@@ -459,22 +466,7 @@ void exchng2Vector(VectorField & A, size_t N_GC, const Process & process, MPI_Da
     int nbrleft = process.nbrleft; //the rank of the process to the left of the current process
     int nbrright = process.nbrright; //the rank of the process to the right of the current process
 
-    size_t N_comps = A.shape()[0]; //number of vector field components
-    size_t Nr = A.shape()[1]; //Extent of vector field in r-dimension. Includes ghost cells.
     size_t Ntheta_loc = A.shape()[2]; //Extent of vector field in theta-dimension. includes ghost cells.
-
-    // int count = static_cast<int>(N_comps*Nr);
-    // int blocklength = static_cast<int>(N_GC);
-    // int stride = static_cast<int>(Ntheta_loc);
-    // MPI_Datatype stridetype_int;
-    // MPI_Type_vector( N_comps*Nr, N_GC, Ntheta_loc, MPI_DOUBLE, &stridetype_int);
-    // MPI_Type_vector( count, blocklength, stride, MPI_DOUBLE, &stridetype_int);
-    // MPI_Type_commit( &stridetype_int );
-    //
-    // MPI_Sendrecv( &(A[0][0][Ntheta_loc-2*N_GC]), 1, stridetype_int, nbrright, 0, &(A[0][0][0]), 1, stridetype_int, nbrleft, 0, comm1D, MPI_STATUS_IGNORE);
-    // MPI_Sendrecv( &(A[0][0][N_GC]), 1, stridetype_int, nbrleft, 1, &(A[0][0][Ntheta_loc-N_GC]), 1, stridetype_int, nbrright, 1, comm1D, MPI_STATUS_IGNORE);
-    //
-    // MPI_Type_free( &stridetype_int );
 
     MPI_Sendrecv( &(A[0][0][Ntheta_loc-2*N_GC]), 1, stridetype, nbrright, 0, &(A[0][0][0]), 1, stridetype, nbrleft, 0, comm1D, MPI_STATUS_IGNORE);
     MPI_Sendrecv( &(A[0][0][N_GC]), 1, stridetype, nbrleft, 1, &(A[0][0][Ntheta_loc-N_GC]), 1, stridetype, nbrright, 1, comm1D, MPI_STATUS_IGNORE);
@@ -495,20 +487,7 @@ void exchng2Scalar(ScalarField & A, size_t N_GC, const Process & process, MPI_Da
     int nbrleft = process.nbrleft; //the rank of the process to the left of the current process
     int nbrright = process.nbrright; //the rank of the process to the right of the current process
 
-    size_t Nr = A.shape()[0]; //Extent of vector field in r-dimension. Includes ghost cells.
     size_t Ntheta_loc = A.shape()[1]; //Extent of vector field in theta-dimension. includes ghost cells.
-
-    // int count = static_cast<int>(Nr);
-    // int blocklength = static_cast<int>(N_GC);
-    // int stride = static_cast<int>(Ntheta_loc);
-    // MPI_Datatype stridetype_int;
-    // MPI_Type_vector( count, blocklength, stride, MPI_DOUBLE, &stridetype_int);
-    // MPI_Type_commit( &stridetype_int );
-    //
-    // MPI_Sendrecv( &(A[0][Ntheta_loc-2*N_GC]), 1, stridetype_int, nbrright, 0, &(A[0][0]), 1, stridetype_int, nbrleft, 0, comm1D, MPI_STATUS_IGNORE);
-    // MPI_Sendrecv( &(A[0][N_GC]), 1, stridetype_int, nbrleft, 1, &(A[0][Ntheta_loc-N_GC]), 1, stridetype_int, nbrright, 1, comm1D, MPI_STATUS_IGNORE);
-    //
-    // MPI_Type_free( &stridetype_int );
 
     MPI_Sendrecv( &(A[0][Ntheta_loc-2*N_GC]), 1, stridetype, nbrright, 0, &(A[0][0]), 1, stridetype, nbrleft, 0, comm1D, MPI_STATUS_IGNORE);
     MPI_Sendrecv( &(A[0][N_GC]), 1, stridetype, nbrleft, 1, &(A[0][Ntheta_loc-N_GC]), 1, stridetype, nbrright, 1, comm1D, MPI_STATUS_IGNORE);

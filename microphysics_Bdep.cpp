@@ -7,7 +7,6 @@
 #include <vector>
 #include <math.h>
 #include <algorithm>
-#include <gsl/gsl_errno.h>
 #include <gsl/gsl_integration.h>
 #include <gsl/gsl_spline.h>
 #include <gsl/gsl_sf_expint.h>
@@ -1239,8 +1238,6 @@ void Omega_xyFixedT(ScalarField & Bmag, RadialScalarField & mu, ScalarField & T,
     static double Tconv = k_B*T_0; //T_0 in MeV. Used to convert T in units of T_0 to MeV
     double eB, T_MeV, n_max, thermalBFactor, p_F; //fundamental charge times B in MeV^2, maximum occupied Landau level at T=0, dimensionless thermal damping factor for de Haas-van Alphen oscillations, Fermi momentum in MeV
 
-    //T_B = 100*M*( sqrt(1+2*(n_max+1)*eB/eB_crit) - sqrt(1+2*n_max*eB/eB_crit) ); //critical temperature in MeV
-
     double dPdBTemp, d2PdB2Temp, d2PdBdmuTemp;
 
     for(size_t i=0; i<Bmag.shape()[0]-N_GC; i++){
@@ -1307,8 +1304,6 @@ void Omega_xyFixedT(ScalarField & Bmag, RadialScalarField & mu, ScalarField & T,
 */
 void Omega_xyLowT_FixedT_EMSums(double eB, double mu, double T, double p_F, double n_max, double & dPdBTemp, double & d2PdB2Temp, double & d2PdBdmuTemp)
 {
-    //double T_B = M_e*( sqrt(1. + 2.*(n_max+1.)*eB/eB_crit) - sqrt(1. + 2.*n_max*eB/eB_crit) ); //critical temperature in MeV
-
     static double B_2 = 1./6., B_4 = -1./30.;
     static double pi2 = pi*pi;
     static double M2 = M_e*M_e;
@@ -1564,7 +1559,6 @@ void Omega_xyLowT_FixedT_MaxLL(double eB, double mu, double T, double n_max, Ome
 */
 void Omega_xyHighT_FixedT(double eB, double mu, double T, double p_F, OmegaB_deriv_Interpolation & OmB_Interpolators, double & dPdBTemp, double & d2PdB2Temp, double & d2PdBdmuTemp)
 {
-    //T_B = 100*M*( sqrt(1+2*(n_max+1)*eB/eB_crit) - sqrt(1+2*n_max*eB/eB_crit) ); //critical temperature in MeV
     static double zeta3_2 = 2.61237534869; //zeta(3/2)
     static double sqrtpi = sqrt(pi);
     static double pi2 = pi*pi; //pi^2
@@ -1649,7 +1643,7 @@ void Omega_xyVaryingT(ScalarField & Bmag, RadialScalarField & mu, ScalarField & 
     static double M2 = M_e*M_e;
     static double eB_pref = unit_e*B_0*statCGtoMeV2; //constant prefactor for computing e*B in MeV^2
     double eB, n_max, thermalBFactor, p_F; //fundamental charge times B in MeV^2, maximum occupied Landau level at T=0, dimensionless thermal damping factor for de Haas-van Alphen oscillations, Fermi momentum in MeV
-//    double T_B;
+    double T_B;
     double T_MeV; //local temperature in MeV
 
     double dPdBTemp, d2PdB2Temp, d2PdBdmuTemp, d2PdT2Temp, d2PdTdBTemp;
@@ -1667,7 +1661,6 @@ void Omega_xyVaryingT(ScalarField & Bmag, RadialScalarField & mu, ScalarField & 
                 T_MeV = T[i][j]/n_t[i]*T_0*k_B; //local temperature in MeV, converted from reduced units
             }
 
-//            c_v_eB[i][j] = ( T_MeV*mu[i]*p_F/3. )*k_B*MeVtoErg/(hbarc*hbarc*hbarc)*1e39/s_0;
             if( Bmag[i][j] < 1e-5 ){
                 M[i][j] = 0.;
                 chi[i][j] = 0.;
@@ -1678,11 +1671,9 @@ void Omega_xyVaryingT(ScalarField & Bmag, RadialScalarField & mu, ScalarField & 
             else{
                 eB = Bmag[i][j]*eB_pref; //e*B in MeV^2
                 n_max = std::floor( (mu[i]*mu[i]-M2)/(2.*eB) ); //highest occupied Landau level at T=0
-                // double x = (mu[i]*mu[i]-M2)/(2.*eB);
-                // int nmax = static_cast<int>(std::floor(x));
 
                 thermalBFactor = 2.*pi*pi*mu[i]*T_MeV/eB;
-                //T_B = M_E*( sqrt(1. + 2.*(n_max+1.)*eB/eB_crit) - sqrt(1. + 2.*n_max*eB/eB_crit) );
+                T_B = M_E*( sqrt(1. + 2.*(n_max+1.)*eB/eB_crit) - sqrt(1. + 2.*n_max*eB/eB_crit) );
 
                 dPdBTemp = 0.; //zero dPdBTemp, d2PdB2Temp and d2PdBdmuTemp
                 d2PdB2Temp = 0.;
@@ -1690,21 +1681,20 @@ void Omega_xyVaryingT(ScalarField & Bmag, RadialScalarField & mu, ScalarField & 
                 d2PdT2Temp = 0.;
                 d2PdTdBTemp = 0.;
 
-                // if(thermalBFactor > 1.){
+                if(thermalBFactor > 1.){
                     Omega_xyHighT_VaryingT(eB, mu[i], T_MeV, p_F, OmB_Interpolators, dPdBTemp, d2PdB2Temp, d2PdBdmuTemp, d2PdT2Temp, d2PdTdBTemp);
-                // }
-                // else{
-                //     Omega_xyLowT_VaryingT_EMSums(eB, mu[i], T_MeV, p_F, n_max, dPdBTemp, d2PdB2Temp, d2PdBdmuTemp, d2PdT2Temp, d2PdTdBTemp);
-                //     Omega_xyLowT_VaryingT_MaxLL(eB, mu[i], T_MeV, n_max, OmB_Interpolators, dPdBTemp, d2PdB2Temp, d2PdBdmuTemp, d2PdT2Temp, d2PdTdBTemp);
-                // }
+                }
+                else{
+                    Omega_xyLowT_VaryingT_EMSums(eB, mu[i], T_MeV, p_F, n_max, dPdBTemp, d2PdB2Temp, d2PdBdmuTemp, d2PdT2Temp, d2PdTdBTemp);
+                    Omega_xyLowT_VaryingT_MaxLL(eB, mu[i], T_MeV, n_max, OmB_Interpolators, dPdBTemp, d2PdB2Temp, d2PdBdmuTemp, d2PdT2Temp, d2PdTdBTemp);
+                }
 
                 M[i][j] = sqrtalpha_e*dPdBTemp*MeV2toGauss/B_0; //in MeV^2 -> G -> reduced units
                 if( 1. - 4.*pi*alpha_e*d2PdB2Temp < 0. ) chi[i][j] = 1./(4.*pi); //removes unstable regions (requires 1-4*pi*d2PdB2 = 1 - 4*pi*chi > 0)
                 else chi[i][j] = alpha_e*d2PdB2Temp;
                 M_mu[i][j] = sqrtalpha_e*( d2PdBdmuTemp )*MeV2toGauss/B_0; //in MeV -> G/MeV -> reduced units/MeV
                 c_v_eB[i][j] = ( T_MeV*d2PdT2Temp )*k_B*MeVtoErg/(hbarc*hbarc*hbarc)*1e39/s_0; //in MeV^3 -> MeV^4/K -> erg/(fm^3 K) -> erg/(cm^3 K) -> reduced units
-//                if( T[i][j] < T_B ) c_v_eB[i][j] = ( k_B*T[i][j]*T_0*d2PdT2Temp )*k_B*MeVtoErg/pow(hbarc,3.)*1e39/s_0; //in MeV^3 -> MeV^4/K -> erg/(fm^3 K) -> erg/(cm^3 K) -> reduced units
-//                else ( k_B*T[i][j]*T_0*mu[i]*p_F/3. )*k_B*MeVtoErg/pow(hbarc,3.)*1e39/s_0;
+                if( T[i][j] < T_B ) c_v_eB[i][j] = ( k_B*T[i][j]*T_0*d2PdT2Temp )*k_B*MeVtoErg/pow(hbarc,3.)*1e39/s_0; //in MeV^3 -> MeV^4/K -> erg/(fm^3 K) -> erg/(cm^3 K) -> reduced units
                 C_m[i][j] = k_B*sqrtalpha_e*( d2PdTdBTemp )*MeV2toGauss*T_0/B_0; //in MeV -> MeV^2/K -> G/K -> reduced units
             }
         }
@@ -1731,8 +1721,6 @@ void Omega_xyVaryingT(ScalarField & Bmag, RadialScalarField & mu, ScalarField & 
 */
 void Omega_xyLowT_VaryingT_EMSums(double eB, double mu, double T, double p_F, double n_max, double & dPdBTemp, double & d2PdB2Temp, double & d2PdBdmuTemp, double & d2PdT2Temp, double & d2PdTdBTemp)
 {
-    //double T_B = M_e*( sqrt(1. + 2.*(n_max+1.)*eB/eB_crit) - sqrt(1. + 2.*n_max*eB/eB_crit) ); //critical temperature in MeV
-
     static double pi2 = pi*pi;
     static double pi4 = pi2*pi2;
     static double B_2 = 1./6., B_4 = -1./30.;
@@ -1990,9 +1978,6 @@ void Omega_xyLowT_VaryingT_MaxLL(double eB, double mu, double T, double n_max, O
 */
 void Omega_xyHighT_VaryingT(double eB, double mu, double T, double p_F, OmegaB_deriv_Interpolation & OmB_Interpolators, double & dPdBTemp, double & d2PdB2Temp, double & d2PdBdmuTemp, double & d2PdT2Temp, double & d2PdTdBTemp)
 {
-
-    //T_B = 100*M*( sqrt(1+2*(n_max+1)*eB/eB_crit) - sqrt(1+2*n_max*eB/eB_crit) ); //critical temperature in MeV
-
     static double zeta3_2 = 2.61237534869; //zeta(3/2)
     static double sqrtpi = sqrt(pi);
     static double pi2 = pi*pi; //pi^2
@@ -2009,26 +1994,26 @@ void Omega_xyHighT_VaryingT(double eB, double mu, double T, double p_F, OmegaB_d
     double p_F2 = p_F*p_F;
 
     // First compute regular (non-oscillatory part) of the terms. Add them to zeroed variables.
-    // double x = p_F2/eB;
-    // if( x < 1e4 ){
-    //     i1val = gsl_spline_eval( OmB_Interpolators.i_1, x, OmB_Interpolators.i_1_acc );
-    //     i2val = gsl_spline_eval( OmB_Interpolators.i_2, x, OmB_Interpolators.i_2_acc );
-    //     i3val = gsl_spline_eval( OmB_Interpolators.i_3, x, OmB_Interpolators.i_3_acc );
-    // }
-    // else{
-    //     i1val = sqrtpi/sqrt(x)/3.;
-    //     i2val = sqrtpi/(6.*x*sqrt(x));
-    //     i3val = sqrtpi/(4.*x*x*sqrt(x));
-    // }
-    //
-    // h1val = gsl_spline2d_eval( OmB_Interpolators.h_1, mu/M_e, eB/(M2), OmB_Interpolators.h_1_acc_a, OmB_Interpolators.h_1_acc_b );
-    // h2val = gsl_spline2d_eval( OmB_Interpolators.h_2, mu/M_e, eB/(M2), OmB_Interpolators.h_2_acc_a, OmB_Interpolators.h_2_acc_b );
-    //
-    // dPdBTemp += sqrteB/(2.*pi2_5)*h1val - M2/(4.*pi2_5*sqrteB)*h2val - 1./(8.*pi2_5)*sqrteB*( mu*i1val - sqrt2opi*M_e*zeta3_2 );
-    // d2PdB2Temp += 1./(2.*pi2_5*sqrteB)*h1val - M2/(2.*pi2_5*eB*sqrteB)*h2val - 5./(16.*pi2_5*sqrteB)*( mu*i1val - sqrt2opi*M_e*zeta3_2 );
-    // d2PdBdmuTemp += 3.*sqrteB/(8.*pi2_5)*i1val + p_F2/(4.*pi2_5*sqrteB)*i2val;
-    // d2PdT2Temp += mu*p_F/3. - mu*sqrt(eB/pi)/6.*i2val;
-    // d2PdTdBTemp += -mu*T/(12.*sqrt(pi*eB))*( i2val + 2.*p_F2/eB*i3val );
+    double x = p_F2/eB;
+    if( x < 1e4 ){
+        i1val = gsl_spline_eval( OmB_Interpolators.i_1, x, OmB_Interpolators.i_1_acc );
+        i2val = gsl_spline_eval( OmB_Interpolators.i_2, x, OmB_Interpolators.i_2_acc );
+        i3val = gsl_spline_eval( OmB_Interpolators.i_3, x, OmB_Interpolators.i_3_acc );
+    }
+    else{
+        i1val = sqrtpi/sqrt(x)/3.;
+        i2val = sqrtpi/(6.*x*sqrt(x));
+        i3val = sqrtpi/(4.*x*x*sqrt(x));
+    }
+
+    h1val = gsl_spline2d_eval( OmB_Interpolators.h_1, mu/M_e, eB/(M2), OmB_Interpolators.h_1_acc_a, OmB_Interpolators.h_1_acc_b );
+    h2val = gsl_spline2d_eval( OmB_Interpolators.h_2, mu/M_e, eB/(M2), OmB_Interpolators.h_2_acc_a, OmB_Interpolators.h_2_acc_b );
+
+    dPdBTemp += sqrteB/(2.*pi2_5)*h1val - M2/(4.*pi2_5*sqrteB)*h2val - 1./(8.*pi2_5)*sqrteB*( mu*i1val - sqrt2opi*M_e*zeta3_2 );
+    d2PdB2Temp += 1./(2.*pi2_5*sqrteB)*h1val - M2/(2.*pi2_5*eB*sqrteB)*h2val - 5./(16.*pi2_5*sqrteB)*( mu*i1val - sqrt2opi*M_e*zeta3_2 );
+    d2PdBdmuTemp += 3.*sqrteB/(8.*pi2_5)*i1val + p_F2/(4.*pi2_5*sqrteB)*i2val;
+    d2PdT2Temp += mu*p_F/3. - mu*sqrt(eB/pi)/6.*i2val;
+    d2PdTdBTemp += -mu*T/(12.*sqrt(pi*eB))*( i2val + 2.*p_F2/eB*i3val );
 
     // Next compute oscillatory part of the terms, involving a sum over p=0,...,p_max
     for(int p = 1; p <= p_max; p++){
@@ -2091,7 +2076,6 @@ void Omega_xyVaryingTC_veOnly(ScalarField & Bmag, RadialScalarField & mu, Scalar
                 eB = Bmag[i][j]*eB_pref; //e*B in MeV^2
                 n_max = std::floor( (mu[i]*mu[i]-M2)/(2.*eB) ); //highest occupied Landau level at T=0
                 thermalBFactor = 2.*pi*pi*mu[i]*k_B*T[i][j]/n_t[i]*T_0/eB;
-                //T_B = M_E*( sqrt(1. + 2.*(n_max+1.)*eB/eB_crit) - sqrt(1. + 2.*n_max*eB/eB_crit) );
                 d2PdT2Temp = 0.;
 
                 if(thermalBFactor > 1.){
@@ -2126,8 +2110,6 @@ void Omega_xyVaryingTC_veOnly(ScalarField & Bmag, RadialScalarField & mu, Scalar
 */
 void Omega_xyLowT_VaryingT_EMSumsC_veOnly(double eB, double mu, double T, double p_F, double n_max, double & d2PdT2Temp)
 {
-    //double T_B = M_e*( sqrt(1. + 2.*(n_max+1.)*eB/eB_crit) - sqrt(1. + 2.*n_max*eB/eB_crit) ); //critical temperature in MeV
-
     static double B_2 = 1./6., B_4 = -1./30.;
     double npr = n_max - 1.;
     double E_Fnpr = sqrt( p_F*p_F - 2.*eB*npr );
@@ -2302,8 +2284,6 @@ void Omega_xyLowT_VaryingT_MaxLLC_veOnly(double eB, double mu, double T, double 
 */
 void Omega_xyHighT_VaryingTC_veOnly(double eB, double mu, double T, double p_F, OmegaB_deriv_Interpolation & OmB_Interpolators, double & d2PdT2Temp)
 {
-
-    //T_B = 100*M*( sqrt(1+2*(n_max+1)*eB/eB_crit) - sqrt(1+2*n_max*eB/eB_crit) ); //critical temperature in MeV
     static double sqrtpi = sqrt(pi);
     static int p_max = 5; //maximum number of terms to include in high-T approximation sum
 

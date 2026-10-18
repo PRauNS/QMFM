@@ -10,7 +10,6 @@
 #include <string>
 #include <math.h>
 #include <vector>
-#include <stdlib.h>
 #include <stdio.h>
 #include <mpi.h>
 
@@ -26,10 +25,6 @@
 namespace fs = std::filesystem;
 
 #include "boost/multi_array.hpp"
-
-#include <gsl/gsl_math.h>
-#include <gsl/gsl_errno.h>
-#include <gsl/gsl_integration.h>
 #include <gsl/gsl_spline.h>
 
 #include <fftw3.h>
@@ -45,7 +40,7 @@ namespace fs = std::filesystem;
 
 const H5std_string FILE_EXT( ".h5" );
 
-void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & cE, VectorField & J, VectorField & q, VectorField & B_np1, ScalarField & T_np1, ScalarField & q_SH,
+void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & cE, VectorField & J, VectorField & q, VectorField & B_np1, ScalarField & T_np1,
     TransCoeffs & transCoeffs, ThermCoeffs & thermCoeffs, MagCoeffs & magCoeffs, const Domain & dm, const Process & process, const BParams & bparams, TParams & tparams, CoreThermalParams & corethermalparams, double t);
 
 int main(int argc, char **argv) {
@@ -221,7 +216,12 @@ int main(int argc, char **argv) {
 
     //Compute initial magnetic field and create VectorField objects to hold electric field and updated magnetic field
     VectorField B(boost::extents[3][Nr+2*N_GC][MyE-MyS+2*N_GC]); //Cell-face average values of B across partial domain
-    InitializeB(r, theta, bparams, domain, N_GC, Deltar, Deltatheta, B); //Generate initial values of B components by cell-face averaging over initial functional form
+    if (bparams.B_field_type == "crust-confined") {
+        InitializeB_CrustConfined(r, theta, bparams, domain, N_GC, Deltar, Deltatheta, B); //Generate initial values of B components by cell-face averaging over initial functional form
+    }
+    else if (bparams.B_field_type == "core-threaded") {
+        InitializeB_CoreThreaded(r, theta, bparams, domain, N_GC, Deltar, Deltatheta, B); //Generate initial values of B components by cell-face averaging over initial functional form
+    }
     B_BoundaryConditions(B, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, domain); //Impose boundary conditions on magnetic field
     exchng2Vector(B, N_GC, process, stridetype_Vec);
     VectorField B_np1(boost::extents[3][Nr+2*N_GC][MyE-MyS+2*N_GC]); //Cell-face average values of B in reduced units at next time step
@@ -237,7 +237,7 @@ int main(int argc, char **argv) {
     //These objects are referenced throughout the code.
     TransCoeffs transCoeffs(Nr+2*N_GC, MyE-MyS+2*N_GC, tparams.conductivity_anisotropy, simparams.C_hyp);
     ThermCoeffs thermCoeffs(Nr+2*N_GC, MyE-MyS+2*N_GC, simparams.IMEX);
-    MagCoeffs magCoeffs(Nr+2*N_GC, MyE-MyS+2*N_GC, bparams.quantization, bparams.PolarAxisQuantization);
+    MagCoeffs magCoeffs(Nr+2*N_GC, MyE-MyS+2*N_GC, bparams.quantization, bparams.SuppressPolarAxisQuantization);
 
     ScalarField n_e(boost::extents[Nr+2*N_GC][MyE-MyS+2*N_GC]); //electron number density in fm^{-3}
     RadialScalarField A(boost::extents[Nr+2*N_GC]); //mass number
@@ -287,13 +287,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    //    double sigma_const = 1e23, ne_const = 2e-6;
     //Set cell-averaged value of Hall diffusivity. Also includes ghost cells, which should be filled identically to nearest cell.
     for(size_t i=0; i<Nr+2*N_GC; i++){
         for(size_t j=0; j<MyE-MyS+2*N_GC; j++){
-            //            transCoeffs.eta_O[i][j] = ( 6.*pow( (r[i]-r_min)/(r_max-r_min),3.5 ) + 3.*pow( (r_max-r[i])/(r_max-r_min),4. ) )*(1e5*1e5/(1e6*yr))*t_0/(L_0*L_0); //Ohmic diffusivity in reduced units from Vigano et al 2021
-            // transCoeffs.eta_O[i][j] = 0.;//c*c*t_0/(4.*pi*sigma_const*L_0*L_0); //Ohmic diffusivity in reduced units
-            //            transCoeffs.eta_H[i][j] = c*B_0*t_0/(4.*pi*unit_e*ne_const*1e39*L_0*L_0); //Hall diffusivity in reduced units. 1e39 factor converts n_e from fm^-3 to cm^-3
             transCoeffs.eta_H[i][j] = c*B_0*t_0/(4.*pi*unit_e*n_e[i][j]*1e39*L_0*L_0); //Hall diffusivity in reduced units. 1e39 factor converts n_e from fm^-3 to cm^-3
             transCoeffs.psi_H[i][j] = transCoeffs.eta_H[i][j]/( domain.r[i]*domain.r[i]*domain.n_t[i] ); //Hall stream function for calculation of advection velocities in toroidal B evolution
             magCoeffs.chi[i][j] = 0.; //initializes differential magnetic susceptibility values to zero- needed for non-quantizing case.
@@ -488,8 +484,8 @@ int main(int argc, char **argv) {
     B_prop.setChunk(RANK, B_chunk_dims);
     H5::DataSet *B_set = new DataSet(file.createDataSet("B", H5::PredType::NATIVE_DOUBLE, *dataspace_B, B_prop));
 
-    typedef VectorField::index_range range;
-    VectorField::array_view<3>::type B_view = B[ boost::indices[range()][range(N_GC,Nr+N_GC)][range(N_GC,MyE-MyS+N_GC)] ];
+    typedef VectorField::index_range rangeB;
+    VectorField::array_view<3>::type B_view = B[ boost::indices[rangeB()][rangeB(N_GC,Nr+N_GC)][rangeB(N_GC,MyE-MyS+N_GC)] ];
     VectorField Phys_B(boost::extents[3][Nr][MyE-MyS]); //Cell-face average values of B across partial domain. Excludes ghost cells
     hsize_t B_memdims[3] = {3, Nr, MyE-MyS}; //the dimensions of each new Phys_B entry- used when writing subsequent time slices to output
     Phys_B = B_view; //copy view of B which removes ghost cells into smaller array which can be written into h5 file
@@ -509,8 +505,8 @@ int main(int argc, char **argv) {
     T_prop.setChunk(RANK_T, T_chunk_dims);
     H5::DataSet *T_set = new DataSet(file.createDataSet("T", H5::PredType::NATIVE_DOUBLE, *dataspace_T, T_prop));
 
-    typedef VectorField::index_range range;
-    VectorField::array_view<2>::type T_view = T[ boost::indices[range(N_GC,Nr+N_GC)][range(N_GC,MyE-MyS+N_GC)] ];
+    typedef VectorField::index_range rangeT;
+    VectorField::array_view<2>::type T_view = T[ boost::indices[rangeT(N_GC,Nr+N_GC)][rangeT(N_GC,MyE-MyS+N_GC)] ];
     ScalarField Phys_T(boost::extents[Nr][MyE-MyS]); //Cell-face average values of B across partial domain. Excludes ghost cells
     hsize_t T_memdims[2] = {Nr, MyE-MyS}; //the dimensions of each new Phys_T entry- used when writing subsequent time slices to output
     Phys_T = T_view; //copy view of B which removes ghost cells into smaller array which can be written into h5 file
@@ -524,8 +520,7 @@ int main(int argc, char **argv) {
     J_prop.setChunk(RANK, J_chunk_dims);
     H5::DataSet *J_set = new DataSet(file.createDataSet("J", H5::PredType::NATIVE_DOUBLE, *dataspace_J, J_prop));
 
-    //typedef VectorField::index_range range;
-    VectorField::array_view<3>::type J_view = J[ boost::indices[range()][range(N_GC,Nr+N_GC)][range(N_GC,MyE-MyS+N_GC)] ];
+    VectorField::array_view<3>::type J_view = J[ boost::indices[rangeB()][rangeB(N_GC,Nr+N_GC)][rangeB(N_GC,MyE-MyS+N_GC)] ];
     VectorField Phys_J(boost::extents[3][Nr][MyE-MyS]); //Cell-face average values of J across partial domain. Excludes ghost cells
     Phys_J = J_view; //copy view of B which removes ghost cells into smaller array which can be written into h5 file
     J_set->write( Phys_J.data(), PredType::NATIVE_DOUBLE ); //does not write ghost cells.
@@ -575,7 +570,6 @@ int main(int argc, char **argv) {
     H5::DataSet *JH_set = new DataSet(file.createDataSet("JH", H5::PredType::NATIVE_DOUBLE, *dataspace_t, t_prop));
     H5::DataSet *QJH_set = new DataSet(file.createDataSet("QJH", H5::PredType::NATIVE_DOUBLE, *dataspace_t, t_prop));
     H5::DataSet *PF_set = new DataSet(file.createDataSet("PF", H5::PredType::NATIVE_DOUBLE, *dataspace_t, t_prop));
-    H5::DataSet *SH_set = new DataSet(file.createDataSet("SH", H5::PredType::NATIVE_DOUBLE, *dataspace_t, t_prop));
     H5::DataSet *DeltaEInt_set = new DataSet(file.createDataSet("DeltaEInt", H5::PredType::NATIVE_DOUBLE, *dataspace_t, t_prop));
     H5::DataSet *T_s_eff_set = new DataSet(file.createDataSet("T_s_eff", H5::PredType::NATIVE_DOUBLE, *dataspace_t, t_prop)); //average local surface temperature in reduced units
     H5::DataSet *T_core_set = new DataSet(file.createDataSet("T_core", H5::PredType::NATIVE_DOUBLE, *dataspace_t, t_prop)); //uniform redshifted core temperature in reduced units
@@ -627,12 +621,11 @@ int main(int argc, char **argv) {
     // DeltaEInt: difference between (U_BSum - U_BSum0) and JouleSum + PoyntingSum in reduced units
     // T_av, T_s_eff: average redshifted temperature in simulation domain in reduced units (crude average) and average (effective) local surface temperature in reduced units
     // Qnu_CrustSum: crust volume-integrated neutrino emissivity in reduced units.
-    double U_BSum0 = 0., U_BSum, JouleSum, QuasiJouleSum, PoyntingSum, SHSum, DeltaEInt = 0., JHInt = 0., PoyntingFInt, SHInt, T_av, T_s_eff, Qnu_CrustSum;
+    double U_BSum0 = 0., U_BSum, JouleSum, QuasiJouleSum, PoyntingSum, DeltaEInt = 0., JHInt = 0., PoyntingFInt, T_av, T_s_eff, Qnu_CrustSum;
     std::vector<double> U_BSumVec(num_procs);
     std::vector<double> JouleSumVec(num_procs);
     std::vector<double> QuasiJouleSumVec(num_procs);
     std::vector<double> PoyntingSumVec(num_procs);
-    std::vector<double> SHSumVec(num_procs);
     std::vector<double> T_avVec(num_procs);
     std::vector<double> T_minVec(num_procs);
     std::vector<double> T_maxVec(num_procs);
@@ -642,17 +635,14 @@ int main(int argc, char **argv) {
     std::vector<double> JouleSumHist;
     std::vector<double> QuasiJouleSumHist;
     std::vector<double> PoyntingSumHist;
-    std::vector<double> SHSumHist;
     std::vector<double> DeltaESumHist;
     std::vector<double> Deltat_vec; //vector of time step values
 
-    ScalarField q_SH(boost::extents[Nr+2*N_GC][MyE-MyS+2*N_GC]); //shock heating density (energy per unit volume per unit time)
-
     if( magCoeffs.quantization == true ){
         exchng2Vector(magCoeffs.J_B, N_GC, process, stridetype_Vec); //Exchange J_B cells in a periodic manner in the theta-direction into ghost cells
-        QuasiEnergyConservation(B, phE, cE, J, q_SH, transCoeffs, magCoeffs, N_GC, domain, U_BSum, QuasiJouleSum, PoyntingSum, JouleSum, SHSum);
+        QuasiEnergyConservation(B, phE, cE, J, transCoeffs, magCoeffs, N_GC, domain, U_BSum, QuasiJouleSum, PoyntingSum, JouleSum);
     }
-    else EnergyConservation(B, phE, cE, J, q_SH, transCoeffs, magCoeffs, N_GC, domain, U_BSum, JouleSum, PoyntingSum, SHSum);
+    else EnergyConservation(B, phE, cE, J, transCoeffs, magCoeffs, N_GC, domain, U_BSum, JouleSum, PoyntingSum);
     double T_min, T_max;
     T_avCalc(T, N_GC, T_av, T_min, T_max);
     Qnu_CrustIntegratedCalc(thermCoeffs.q_nuCrust, N_GC, domain, Qnu_CrustSum);
@@ -661,10 +651,7 @@ int main(int argc, char **argv) {
     MPI_Allgather(&JouleSum, 1, MPI_DOUBLE, JouleSumVec.data(), 1, MPI_DOUBLE, comm1D);
     if(magCoeffs.quantization == true) MPI_Allgather(&QuasiJouleSum, 1, MPI_DOUBLE, QuasiJouleSumVec.data(), 1, MPI_DOUBLE, comm1D);
     MPI_Allgather(&PoyntingSum, 1, MPI_DOUBLE, PoyntingSumVec.data(), 1, MPI_DOUBLE, comm1D);
-    MPI_Allgather(&SHSum, 1, MPI_DOUBLE, SHSumVec.data(), 1, MPI_DOUBLE, comm1D);
     MPI_Allgather(&T_av, 1, MPI_DOUBLE, T_avVec.data(), 1, MPI_DOUBLE, comm1D);
-    // MPI_Allgather(&T_min, 1, MPI_DOUBLE, T_minVec.data(), 1, MPI_DOUBLE, comm1D);
-    // MPI_Allgather(&T_max, 1, MPI_DOUBLE, T_maxVec.data(), 1, MPI_DOUBLE, comm1D);
     MPI_Allgather(&tparams.Ts4_av, 1, MPI_DOUBLE, Ts4_avVec.data(), 1, MPI_DOUBLE, comm1D);
     MPI_Allgather(&Qnu_CrustSum, 1, MPI_DOUBLE, Qnu_CrustVec.data(), 1, MPI_DOUBLE, comm1D);
 
@@ -673,19 +660,18 @@ int main(int argc, char **argv) {
         JouleSum = std::reduce(JouleSumVec.begin(), JouleSumVec.end());
         if( magCoeffs.quantization == true ) QuasiJouleSum = std::reduce(QuasiJouleSumVec.begin(), QuasiJouleSumVec.end());
         PoyntingSum = std::reduce(PoyntingSumVec.begin(), PoyntingSumVec.end());
-        SHSum = std::reduce(SHSumVec.begin(), SHSumVec.end());
         Qnu_CrustSum = std::reduce(Qnu_CrustVec.begin(), Qnu_CrustVec.end());
         T_av = std::reduce(T_avVec.begin(), T_avVec.end())/double(num_procs);
         T_s_eff = pow( std::reduce(Ts4_avVec.begin(), Ts4_avVec.end())/(4.*pi),0.25 );
 
         U_BSum0 = U_BSum;
         JouleSumHist.push_back(JouleSum);
-        SHSumHist.push_back(SHSum);
+        PoyntingSumHist.push_back(PoyntingSum);
         if( magCoeffs.quantization == true ){
             QuasiJouleSumHist.push_back(QuasiJouleSum);
-            DeltaESumHist.push_back(QuasiJouleSum+PoyntingSum+SHSum);
+            DeltaESumHist.push_back(QuasiJouleSum+PoyntingSum);
         }
-        else DeltaESumHist.push_back(JouleSum+PoyntingSum+SHSum);
+        else DeltaESumHist.push_back(JouleSum+PoyntingSum);
 
         //Add energy conservation, core temperature and surface temperature data to H5 file
         U_B_set->write( &U_BSum, PredType::NATIVE_DOUBLE );
@@ -693,7 +679,6 @@ int main(int argc, char **argv) {
         if( magCoeffs.quantization == true ) QJH_set->write( &QuasiJouleSum, PredType::NATIVE_DOUBLE );
         else QJH_set->write( &JouleSum, PredType::NATIVE_DOUBLE );
         PF_set->write( &PoyntingSum, PredType::NATIVE_DOUBLE );
-        SH_set->write( &SHSum, PredType::NATIVE_DOUBLE );
         DeltaEInt_set->write( &DeltaEInt, PredType::NATIVE_DOUBLE );
         T_s_eff_set->write( &T_s_eff, PredType::NATIVE_DOUBLE );
         T_core_set->write( &tparams.Tcore, PredType::NATIVE_DOUBLE );
@@ -710,7 +695,7 @@ int main(int argc, char **argv) {
 
         domain.t = t;
 
-        RK_Step(B, T, phE, cE, J, q, B_np1, T_np1, q_SH, transCoeffs, thermCoeffs, magCoeffs, domain, process, bparams, tparams, corethermalparams, t);
+        RK_Step(B, T, phE, cE, J, q, B_np1, T_np1, transCoeffs, thermCoeffs, magCoeffs, domain, process, bparams, tparams, corethermalparams, t);
         exchng2Vector(phE,N_GC,process,stridetype_Vec);
         exchng2Vector(cE,N_GC,process,stridetype_Vec);
 
@@ -721,16 +706,13 @@ int main(int argc, char **argv) {
 
         // Check energy conservation
         if( magCoeffs.quantization == true ){
-            QuasiEnergyConservation(B, phE, cE, J, q_SH, transCoeffs, magCoeffs, N_GC, domain, U_BSum, QuasiJouleSum, PoyntingSum, JouleSum, SHSum);
+            QuasiEnergyConservation(B, phE, cE, J, transCoeffs, magCoeffs, N_GC, domain, U_BSum, QuasiJouleSum, PoyntingSum, JouleSum);
         }
-        else EnergyConservation(B, phE, cE, J, q_SH, transCoeffs, magCoeffs, N_GC, domain, U_BSum, JouleSum, PoyntingSum, SHSum);
-        //EnergyPrintOut(J, phE, cE, transCoeffs, magCoeffs, N_GC, domain);
+        else EnergyConservation(B, phE, cE, J, transCoeffs, magCoeffs, N_GC, domain, U_BSum, JouleSum, PoyntingSum);
 
         T_avCalc(T, N_GC, T_av, T_min, T_max);
         Qnu_CrustIntegratedCalc(thermCoeffs.q_nuCrust, N_GC, domain, Qnu_CrustSum);
         corethermalparams.Q_nuCoreVal = gsl_spline_eval( corethermalparams.Q_nuCore, tparams.Tcore, corethermalparams.Q_nuCore_acc );
-
-        // EnergyConservationLocal(B, rE, thE, phE, J, DeltaE, UB_Init, JHPF_Cumulative, transCoeffs, magCoeffs, N_GC, domain, t, process, world_rank, iter, ECons_cadence, bparams);
 
         //Update microphysics. If evolving temperature (tparams.fixed_T == false), then update magnetization coefficients, thermodynamic coefficients and transport coefficients.
         // If not evolving temperature (tparams.fixed_T == true), then updated magnetization coefficients only.
@@ -789,10 +771,7 @@ int main(int argc, char **argv) {
         MPI_Allgather(&JouleSum, 1, MPI_DOUBLE, JouleSumVec.data(), 1, MPI_DOUBLE, comm1D);
         if( magCoeffs.quantization == true ) MPI_Allgather(&QuasiJouleSum, 1, MPI_DOUBLE, QuasiJouleSumVec.data(), 1, MPI_DOUBLE, comm1D);
         MPI_Allgather(&PoyntingSum, 1, MPI_DOUBLE, PoyntingSumVec.data(), 1, MPI_DOUBLE, comm1D);
-        MPI_Allgather(&SHSum, 1, MPI_DOUBLE, SHSumVec.data(), 1, MPI_DOUBLE, comm1D);
         MPI_Allgather(&T_av, 1, MPI_DOUBLE, T_avVec.data(), 1, MPI_DOUBLE, comm1D);
-        // MPI_Allgather(&T_min, 1, MPI_DOUBLE, T_minVec.data(), 1, MPI_DOUBLE, comm1D);
-        // MPI_Allgather(&T_max, 1, MPI_DOUBLE, T_maxVec.data(), 1, MPI_DOUBLE, comm1D);
         MPI_Allgather(&tparams.Ts4_av, 1, MPI_DOUBLE, Ts4_avVec.data(), 1, MPI_DOUBLE, comm1D);
         MPI_Allgather(&Qnu_CrustSum, 1, MPI_DOUBLE, Qnu_CrustVec.data(), 1, MPI_DOUBLE, comm1D);
 
@@ -801,37 +780,30 @@ int main(int argc, char **argv) {
             JouleSum = std::reduce(JouleSumVec.begin(), JouleSumVec.end());
             if( magCoeffs.quantization == true ) QuasiJouleSum = std::reduce(QuasiJouleSumVec.begin(), QuasiJouleSumVec.end());
             PoyntingSum = std::reduce(PoyntingSumVec.begin(), PoyntingSumVec.end());
-            SHSum = std::reduce(SHSumVec.begin(), SHSumVec.end());
             Qnu_CrustSum = std::reduce(Qnu_CrustVec.begin(), Qnu_CrustVec.end());
             T_av = std::reduce(T_avVec.begin(), T_avVec.end())/double(num_procs);
             T_s_eff = pow( std::reduce(Ts4_avVec.begin(), Ts4_avVec.end())/(4.*pi),0.25 ); //divides sum of T_s^4 values integrated over partial domains by total solid angle of star (i.e., a sphere 4*pi), then takes quartic root to get T_s_eff
 
-            // T_max = *std::max_element(T_maxVec.begin(), T_maxVec.end());
-            // T_min = *std::min_element(T_minVec.begin(), T_minVec.end());
-
             JouleSumHist.push_back(JouleSum);
             PoyntingSumHist.push_back(PoyntingSum);
-            SHSumHist.push_back(SHSum);
             if( magCoeffs.quantization == true ){
                 QuasiJouleSumHist.push_back(QuasiJouleSum);
-                DeltaESumHist.push_back(QuasiJouleSum+PoyntingSum+SHSum);
+                DeltaESumHist.push_back(QuasiJouleSum+PoyntingSum);
             }
-            else DeltaESumHist.push_back(JouleSum+PoyntingSum+SHSum);
+            else DeltaESumHist.push_back(JouleSum+PoyntingSum);
             Deltat_vec.push_back(Deltat);
 
             //print out temperature and energy conservation status to terminal
             DeltaEInt = TrapezoidIntegrator(DeltaESumHist,Deltat_vec);
             PoyntingFInt = TrapezoidIntegrator(PoyntingSumHist,Deltat_vec);
-            SHInt = TrapezoidIntegrator(SHSumHist,Deltat_vec);
             if( (iter == 1) || (iter%ECons_cadence == 0) ){
                 std::cout << "t = " << std::setprecision(5) << t*t_0/yr << " yr, T_av = " << T_av*T_0 << " K, ";
                 std::cout << "T_s = " << T_s_eff*T_0 << " K, ";
-                // std::cout << "T_min = " << T_min*T_0 << " K, ";
                 std::cout << "ΔU_B = " << (U_BSum-U_BSum0)*pow(B_0,2.)*pow(L_0,3.) << " erg, ";
                 std::cout << "ΔE = " << DeltaEInt*pow(B_0,2.)*pow(L_0,3.) << " erg, ";
                 if( magCoeffs.quantization == true ){
                     JHInt = TrapezoidIntegrator(JouleSumHist,Deltat_vec);
-                    std::cout << "JH = " << (JHInt+SHInt)*pow(B_0,2.)*pow(L_0,3.) << " erg, ";
+                    std::cout << "JH = " << JHInt*pow(B_0,2.)*pow(L_0,3.) << " erg, ";
                 }
                 std::cout << "PF Int = " << PoyntingFInt*pow(B_0,2.)*pow(L_0,3.) << " erg, % error = " << abs(1.-(U_BSum-DeltaEInt)/U_BSum0)*100. << std::endl;
             }
@@ -881,7 +853,7 @@ int main(int argc, char **argv) {
             B_filespace->selectHyperslab(H5S_SELECT_SET, B_dimsext, B_offset);
             H5::DataSpace *B_memspace = new H5::DataSpace( RANK-1, B_memdims, NULL );
 
-            B_view = B[ boost::indices[range()][range(N_GC,Nr+N_GC)][range(N_GC,MyE-MyS+N_GC)] ];
+            B_view = B[ boost::indices[rangeB()][rangeB(N_GC,Nr+N_GC)][rangeB(N_GC,MyE-MyS+N_GC)] ];
             Phys_B = B_view; //copy view of B which removes ghost cells into smaller array which can be written into h5 file
             B_set->write( Phys_B.data(), PredType::NATIVE_DOUBLE, *B_memspace, *B_filespace );
             delete B_filespace;
@@ -894,7 +866,7 @@ int main(int argc, char **argv) {
             J_filespace->selectHyperslab(H5S_SELECT_SET, B_dimsext, B_offset);
             H5::DataSpace *J_memspace = new H5::DataSpace( RANK-1, B_memdims, NULL );
 
-            J_view = J[ boost::indices[range()][range(N_GC,Nr+N_GC)][range(N_GC,MyE-MyS+N_GC)] ];
+            J_view = J[ boost::indices[rangeB()][rangeB(N_GC,Nr+N_GC)][rangeB(N_GC,MyE-MyS+N_GC)] ];
             Phys_J = J_view; //copy view of J which removes ghost cells into smaller array which can be written into h5 file
             J_set->write( Phys_J.data(), PredType::NATIVE_DOUBLE, *J_memspace, *J_filespace );
             delete J_filespace;
@@ -912,7 +884,7 @@ int main(int argc, char **argv) {
                 T_filespace->selectHyperslab(H5S_SELECT_SET, T_dimsext, T_offset);
                 H5::DataSpace *T_memspace = new H5::DataSpace( RANK_T-1, T_memdims, NULL );
 
-                T_view = T[ boost::indices[range(N_GC,Nr+N_GC)][range(N_GC,MyE-MyS+N_GC)] ];
+                T_view = T[ boost::indices[rangeT(N_GC,Nr+N_GC)][rangeT(N_GC,MyE-MyS+N_GC)] ];
                 Phys_T = T_view; //copy view of T which removes ghost cells into smaller array which can be written into h5 file
                 T_set->write( Phys_T.data(), PredType::NATIVE_DOUBLE, *T_memspace, *T_filespace );
                 delete T_filespace;
@@ -939,7 +911,6 @@ int main(int argc, char **argv) {
                 JH_set->extend(t_size);
                 QJH_set->extend(t_size);
                 PF_set->extend(t_size);
-                SH_set->extend(t_size);
                 DeltaEInt_set->extend(t_size);
                 T_s_eff_set->extend(t_size);
                 T_core_set->extend(t_size);
@@ -950,7 +921,6 @@ int main(int argc, char **argv) {
                 H5::DataSpace *JH_filespace = new H5::DataSpace(JH_set->getSpace());
                 H5::DataSpace *QJH_filespace = new H5::DataSpace(QJH_set->getSpace());
                 H5::DataSpace *PF_filespace = new H5::DataSpace(PF_set->getSpace());
-                H5::DataSpace *SH_filespace = new H5::DataSpace(SH_set->getSpace());
                 H5::DataSpace *DeltaEInt_filespace = new H5::DataSpace(DeltaEInt_set->getSpace());
                 H5::DataSpace *T_s_eff_filespace = new H5::DataSpace(T_s_eff_set->getSpace());
                 H5::DataSpace *T_core_filespace = new H5::DataSpace(T_core_set->getSpace());
@@ -960,7 +930,6 @@ int main(int argc, char **argv) {
                 JH_filespace->selectHyperslab(H5S_SELECT_SET, t_dimsext, t_offset);
                 QJH_filespace->selectHyperslab(H5S_SELECT_SET, t_dimsext, t_offset);
                 PF_filespace->selectHyperslab(H5S_SELECT_SET, t_dimsext, t_offset);
-                SH_filespace->selectHyperslab(H5S_SELECT_SET, t_dimsext, t_offset);
                 DeltaEInt_filespace->selectHyperslab(H5S_SELECT_SET, t_dimsext, t_offset);
                 T_s_eff_filespace->selectHyperslab(H5S_SELECT_SET, t_dimsext, t_offset);
                 T_core_filespace->selectHyperslab(H5S_SELECT_SET, t_dimsext, t_offset);
@@ -970,7 +939,6 @@ int main(int argc, char **argv) {
                 H5::DataSpace *JH_memspace = new H5::DataSpace( 1, t_dimsext, NULL );
                 H5::DataSpace *QJH_memspace = new H5::DataSpace( 1, t_dimsext, NULL );
                 H5::DataSpace *PF_memspace = new H5::DataSpace( 1, t_dimsext, NULL );
-                H5::DataSpace *SH_memspace = new H5::DataSpace( 1, t_dimsext, NULL );
                 H5::DataSpace *DeltaEInt_memspace = new H5::DataSpace( 1, t_dimsext, NULL );
                 H5::DataSpace *T_s_eff_memspace = new H5::DataSpace( 1, t_dimsext, NULL );
                 H5::DataSpace *T_core_memspace = new H5::DataSpace( 1, t_dimsext, NULL );
@@ -981,7 +949,6 @@ int main(int argc, char **argv) {
                 if( magCoeffs.quantization == true ) QJH_set->write( &QuasiJouleSum, PredType::NATIVE_DOUBLE, *QJH_memspace, *QJH_filespace );
                 else QJH_set->write( &JouleSum, PredType::NATIVE_DOUBLE, *QJH_memspace, *QJH_filespace );
                 PF_set->write( &PoyntingSum, PredType::NATIVE_DOUBLE, *PF_memspace, *PF_filespace );
-                SH_set->write( &SHSum, PredType::NATIVE_DOUBLE, *SH_memspace, *SH_filespace );
                 DeltaEInt_set->write( &DeltaEInt, PredType::NATIVE_DOUBLE, *DeltaEInt_memspace, *DeltaEInt_filespace );
                 T_s_eff_set->write( &T_s_eff, PredType::NATIVE_DOUBLE, *T_s_eff_memspace, *T_s_eff_filespace );
                 T_core_set->write( &tparams.Tcore, PredType::NATIVE_DOUBLE, *T_core_memspace, *T_core_filespace );
@@ -995,8 +962,6 @@ int main(int argc, char **argv) {
                 delete QJH_memspace;
                 delete PF_filespace;
                 delete PF_memspace;
-                delete SH_filespace;
-                delete SH_memspace;
                 delete DeltaEInt_filespace;
                 delete DeltaEInt_memspace;
                 delete T_s_eff_filespace;
@@ -1032,7 +997,6 @@ int main(int argc, char **argv) {
     delete JH_set;
     delete QJH_set;
     delete PF_set;
-    delete SH_set;
     delete DeltaEInt_set;
     delete T_s_eff_set;
     delete T_core_set;
@@ -1079,7 +1043,7 @@ int main(int argc, char **argv) {
         Output: B_np1: updated magnetic field
                 T_np1: updated temperature
 */
-void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & cE, VectorField & J, VectorField & q, VectorField & B_np1, ScalarField & T_np1, ScalarField & q_SH,
+void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & cE, VectorField & J, VectorField & q, VectorField & B_np1, ScalarField & T_np1,
     TransCoeffs & trC, ThermCoeffs & thC, MagCoeffs & mC, const Domain & dm, const Process & process, const BParams & bparams, TParams & tparams, CoreThermalParams & corethermalparams, double t)
 {
     size_t Ntheta = dm.Ntheta;
@@ -1114,7 +1078,7 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
 
         Compute_q(T, q, trC, mC, N_GC, dm, process);
         Compute_J(B, J, T, mC, N_GC, dm, process);
-        B_torEvolve(Qphi, q_SH, B, J, T, trC, mC, N_GC, dm, process);
+        B_torEvolve(Qphi, B, J, T, trC, mC, N_GC, dm, process);
         for(size_t i=0; i<B.shape()[1]; i++){
             for(size_t j=0; j<B.shape()[2]; j++){
                 B_1[2][i][j] = B[2][i][j] + Deltat*Qphi[i][j];
@@ -1125,7 +1089,7 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
         Compute_E(B, B_1, phE, cE, J, trC, mC, N_GC, dm, process);
         E_BoundaryConditions(phE, cE, bparams, N_GC, process, dm);
         Compute_EMF(Qr, Qtheta, phE, N_GC, dm, process);
-        TEvolve(QT, T, q, J, phE, cE, q_SH, trC, thC, tparams, N_GC, dm);
+        TEvolve(QT, T, q, J, phE, cE, trC, thC, tparams, N_GC, dm);
 
         for(size_t i=1; i<B.shape()[1]-1; i++){
             for(size_t j=1; j<B.shape()[2]-1; j++){
@@ -1143,7 +1107,6 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
             }
         }
         Tcore_1 = tparams.Tcore + Deltat*TCoreEvolve(T, tparams.Tcore, trC, mC, N_GC, dm, process, corethermalparams);
-//        B_BoundaryConditions(B_1, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, dm, stridetype_Vec);
         B_BoundaryConditionsIntermediate(B_1, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, dm);
         if(trC.conductivity_anisotropy == true) Bmag_and_BhatCalc(B_1, mC, trC.eta_H, trC.eta_O_perp, trC.max_eta_local, dm, N_GC, process);
         else Bmag_and_BhatCalc(B_1, mC, trC.eta_H, trC.eta_O, trC.max_eta_local, dm, N_GC, process);
@@ -1157,7 +1120,7 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
         //Step 2 of SSP2
         Compute_J(B_1, J, T_1, mC, N_GC, dm, process);
         Compute_q(T_1, q, trC, mC, N_GC, dm, process);
-        B_torEvolve(Qphi, q_SH, B_1, J, T_1, trC, mC, N_GC, dm, process);
+        B_torEvolve(Qphi, B_1, J, T_1, trC, mC, N_GC, dm, process);
         for(size_t i=0; i<B.shape()[1]; i++){
             for(size_t j=0; j<B.shape()[2]; j++){
                 B_np1[2][i][j] = 0.5*( B[2][i][j] + B_1[2][i][j] + Deltat*Qphi[i][j] );
@@ -1168,7 +1131,7 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
         Compute_E(B_1, B_np1, phE, cE, J, trC, mC, N_GC, dm, process);
         E_BoundaryConditions(phE, cE, bparams, N_GC, process, dm);
         Compute_EMF(Qr, Qtheta, phE, N_GC, dm, process);
-        TEvolve(QT, T_1, q, J, phE, cE, q_SH, trC, thC, tparams, N_GC, dm);
+        TEvolve(QT, T_1, q, J, phE, cE, trC, thC, tparams, N_GC, dm);
 
         for(size_t i=1; i<B.shape()[1]-1; i++){
             for(size_t j=1; j<B.shape()[2]-1; j++){
@@ -1189,6 +1152,7 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
 
         B_BoundaryConditions(B_np1, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, dm);
         T_BoundaryConditions(T_np1, q, tparams.Tcore, trC, mC, tparams, dm, N_GC, process);
+        if(dm.InitiallyEquatoriallySymmetric == true) B_Symmetrize(B_np1, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, dm);
         if(trC.conductivity_anisotropy == true) Bmag_and_BhatCalc(B_np1, mC, trC.eta_H, trC.eta_O_perp, trC.max_eta_local, dm, N_GC, process); //Updates magnitude of magnetic field at cell centers
         else Bmag_and_BhatCalc(B_np1, mC, trC.eta_H, trC.eta_O, trC.max_eta_local, dm, N_GC, process); //Updates magnitude of magnetic field at cell centers
         exchng2Vector(B_np1, N_GC, process, dm.stridetype_Vec);
@@ -1211,7 +1175,7 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
 
         Compute_q(T, q, trC, mC, N_GC, dm, process);
         Compute_J(B, J, T, mC, N_GC, dm, process);
-        B_torEvolve(Qphi, q_SH, B, J, T, trC, mC, N_GC, dm, process);
+        B_torEvolve(Qphi, B, J, T, trC, mC, N_GC, dm, process);
         for(size_t i=0; i<B.shape()[1]; i++){
             for(size_t j=0; j<B.shape()[2]; j++){
                 B_1[2][i][j] = B[2][i][j] + Deltat*Qphi[i][j];
@@ -1222,7 +1186,7 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
         Compute_E(B, B_1, phE, cE, J, trC, mC, N_GC, dm, process);
         E_BoundaryConditions(phE, cE, bparams, N_GC, process, dm);
         Compute_EMF(Qr, Qtheta, phE, N_GC, dm, process);
-        TEvolve(QT, T, q, J, phE, cE, q_SH, trC, thC, tparams, N_GC, dm);
+        TEvolve(QT, T, q, J, phE, cE, trC, thC, tparams, N_GC, dm);
 
         for(size_t i=1; i<B.shape()[1]-1; i++){
             for(size_t j=1; j<B.shape()[2]-1; j++){
@@ -1239,7 +1203,6 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
             }
         }
         Tcore_1 = tparams.Tcore + Deltat*TCoreEvolve(T, tparams.Tcore, trC, mC, N_GC, dm, process, corethermalparams);
-//        B_BoundaryConditions(B_1, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, dm);
         B_BoundaryConditionsIntermediate(B_1, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, dm);
         if(trC.conductivity_anisotropy == true) Bmag_and_BhatCalc(B_1, mC, trC.eta_H, trC.eta_O_perp, trC.max_eta_local, dm, N_GC, process);
         else Bmag_and_BhatCalc(B_1, mC, trC.eta_H, trC.eta_O, trC.max_eta_local, dm, N_GC, process);
@@ -1247,7 +1210,7 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
 
         Compute_J(B_1, J, T_1, mC, N_GC, dm, process);
         Compute_q(T_1, q, trC, mC, N_GC, dm, process);
-        B_torEvolve(Qphi, q_SH, B_1, J, T_1, trC, mC, N_GC, dm, process);
+        B_torEvolve(Qphi, B_1, J, T_1, trC, mC, N_GC, dm, process);
         for(size_t i=0; i<B.shape()[1]; i++){
             for(size_t j=0; j<B.shape()[2]; j++){
                 B_2[2][i][j] = 0.25*( 3.*B[2][i][j] + B_1[2][i][j] + Deltat*Qphi[i][j]);
@@ -1258,7 +1221,7 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
         Compute_E(B_1, B_2, phE, cE, J, trC, mC, N_GC, dm, process);
         E_BoundaryConditions(phE, cE, bparams, N_GC, process, dm);
         Compute_EMF(Qr, Qtheta, phE, N_GC, dm, process);
-        TEvolve(QT, T_1, q, J, phE, cE, q_SH, trC, thC, tparams, N_GC, dm);
+        TEvolve(QT, T_1, q, J, phE, cE, trC, thC, tparams, N_GC, dm);
 
         for(size_t i=1; i<B.shape()[1]-1; i++){
             for(size_t j=1; j<B.shape()[2]-1; j++){
@@ -1275,7 +1238,6 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
             }
         }
         Tcore_2 = 0.25*( 3.*tparams.Tcore + Tcore_1 + Deltat*TCoreEvolve(T_1, Tcore_1, trC, mC, N_GC, dm, process, corethermalparams));
-//        B_BoundaryConditions(B_2, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, dm, stridetype_Vec);
         B_BoundaryConditionsIntermediate(B_2, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, dm);
         if(trC.conductivity_anisotropy == true) Bmag_and_BhatCalc(B_2, mC, trC.eta_H, trC.eta_O_perp, trC.max_eta_local, dm, N_GC, process);
         else Bmag_and_BhatCalc(B_2, mC, trC.eta_H, trC.eta_O, trC.max_eta_local, dm, N_GC, process);
@@ -1283,7 +1245,7 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
 
         Compute_J(B_2, J, T_2, mC, N_GC, dm, process);
         Compute_q(T_2, q, trC, mC, N_GC, dm, process);
-        B_torEvolve(Qphi, q_SH, B_2, J, T_2, trC, mC, N_GC, dm, process);
+        B_torEvolve(Qphi, B_2, J, T_2, trC, mC, N_GC, dm, process);
         for(size_t i=0; i<B.shape()[1]; i++){
             for(size_t j=0; j<B.shape()[2]; j++){
                 B_np1[2][i][j] = 1./3.*( B[2][i][j] + 2.*B_2[2][i][j] + 2.*Deltat*Qphi[i][j] );
@@ -1294,7 +1256,7 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
         Compute_E(B_2, B_np1, phE, cE, J, trC, mC, N_GC, dm, process);
         E_BoundaryConditions(phE, cE, bparams, N_GC, process, dm);
         Compute_EMF(Qr, Qtheta, phE, N_GC, dm, process);
-        TEvolve(QT, T_2, q, J, phE, cE, q_SH, trC, thC, tparams, N_GC, dm);
+        TEvolve(QT, T_2, q, J, phE, cE, trC, thC, tparams, N_GC, dm);
 
         for(size_t i=1; i<B.shape()[1]-1; i++){
             for(size_t j=1; j<B.shape()[2]-1; j++){
@@ -1314,9 +1276,10 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
         tparams.Tcore = 1./3.*( tparams.Tcore + 2.*Tcore_2 + 2.*Deltat*TCoreEvolve(T_2, Tcore_2, trC, mC, N_GC, dm, process, corethermalparams) );
 
         B_BoundaryConditions(B_np1, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, dm);
+        T_BoundaryConditions(T_np1, q, tparams.Tcore, trC, mC, tparams, dm, N_GC, process);
+        if(dm.InitiallyEquatoriallySymmetric == true) B_Symmetrize(B_np1, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, dm);
         if(trC.conductivity_anisotropy == true) Bmag_and_BhatCalc(B_np1, mC, trC.eta_H, trC.eta_O_perp, trC.max_eta_local, dm, N_GC, process);
         else Bmag_and_BhatCalc(B_np1, mC, trC.eta_H, trC.eta_O, trC.max_eta_local, dm, N_GC, process);
-        T_BoundaryConditions(T_np1, q, tparams.Tcore, trC, mC, tparams, dm, N_GC, process);
         exchng2Vector(B_np1, N_GC, process, dm.stridetype_Vec);
         exchng2Scalar(T_np1, N_GC, process, dm.stridetype_Sca);
 
@@ -1346,7 +1309,7 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
 
         //Step 1 of IMEX-SSP2
         Compute_J(B, J, T, mC, N_GC, dm, process);
-        B_torEvolve(Qphi, q_SH, B, J, T, trC, mC, N_GC, dm, process);
+        B_torEvolve(Qphi, B, J, T, trC, mC, N_GC, dm, process);
         for(size_t i=0; i<B.shape()[1]; i++){
             for(size_t j=0; j<B.shape()[2]; j++){
                 B_1[2][i][j] = ( B[2][i][j] + Deltat*Qphi[i][j] );
@@ -1358,19 +1321,11 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
         E_BoundaryConditions(phE, cE, bparams, N_GC, process, dm);
         Compute_EMF(Qr, Qtheta, phE, N_GC, dm, process);
 
-        // Compute_KT_IMEX(KT, T, q, J, phE, cE, q_SH, trC, thC, mC, tparams, N_GC, dm, process);
-        // Compute_Tint_IMEX(T_int, T, T, KT, thC, trC, mC, tparams, corethermalparams, N_GC, dm, process, tparams.Tcore, a11); //ADI-intermediate temperature (r-direction)
-        // T_BoundaryConditions(T_int, q, tparams.Tcore, trC, mC, tparams, dm, N_GC, process);
-        // Compute_T_IMEX(T_1, T_int, T, thC, trC, mC, process, N_GC, dm, a11); //ADI-final temperature (theta-direction)
-        // Tcore_1 = TCoreEvolveImplicit(T, tparams.Tcore, tparams.Tcore, trC, mC, N_GC, dm, process, corethermalparams, a11);
-
-        Compute_KT_IMEX(KT, T, q, J, phE, cE, q_SH, trC, thC, mC, tparams, N_GC, dm, process);
+        Compute_KT_IMEX(KT, T, q, J, phE, cE, trC, thC, mC, tparams, N_GC, dm, process);
         Tcore_1 = TCoreEvolveImplicit(T, tparams.Tcore, tparams.Tcore, trC, mC, N_GC, dm, process, corethermalparams, a11);
         Compute_Tint_IMEX(T_int, T, T, KT, thC, trC, mC, tparams, corethermalparams, N_GC, dm, process, Tcore_1, a11); //ADI-intermediate temperature (r-direction)
         T_BoundaryConditions(T_int, q, Tcore_1, trC, mC, tparams, dm, N_GC, process);
         Compute_T_IMEX(T_1, T_int, T, thC, trC, mC, process, N_GC, dm, a11); //ADI-final temperature (theta-direction)
-
-//        T_BoundaryConditions(T_1, q, Tcore_1, trC, mC, tparams, dm, N_GC, process);
 
         for(size_t i=N_GC-1; i<B.shape()[1]-(N_GC-1); i++){
             for(size_t j=N_GC-1; j<B.shape()[2]-(N_GC-1); j++) {
@@ -1394,7 +1349,7 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
 
         //Step 2 of IMEX-SSP2
         Compute_J(B_1, J, T_1, mC, N_GC, dm, process);
-        B_torEvolve(Qphi, q_SH, B_1, J, T_1, trC, mC, N_GC, dm, process);
+        B_torEvolve(Qphi, B_1, J, T_1, trC, mC, N_GC, dm, process);
         for(size_t i=0; i<B.shape()[1]; i++){
             for(size_t j=0; j<B.shape()[2]; j++){
                 B_np1[2][i][j] = 0.5*( B[2][i][j] + B_1[2][i][j] + Deltat*Qphi[i][j] );
@@ -1406,22 +1361,13 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
         E_BoundaryConditions(phE, cE, bparams, N_GC, process, dm);
         Compute_EMF(Qr, Qtheta, phE, N_GC, dm, process);
 
-        Compute_KT_IMEX(KT, T_1, q, J, phE, cE, q_SH, trC, thC, mC, tparams, N_GC, dm, process);
-        Compute_Tstar_IMEX(T_star, T, T_1, q, J, phE, cE, q_SH, thC, trC, mC, tparams, N_GC, dm, process, a21); //IMEX-intermediate temperature
+        Compute_KT_IMEX(KT, T_1, q, J, phE, cE, trC, thC, mC, tparams, N_GC, dm, process);
+        Compute_Tstar_IMEX(T_star, T, T_1, q, J, phE, cE, thC, trC, mC, tparams, N_GC, dm, process, a21); //IMEX-intermediate temperature
         Tcore_star = TCore_starEvolve(T, tparams.Tcore, trC, mC, N_GC, dm, process, corethermalparams, a21); //IMEX-intermediate core temperature
         Compute_Tint_IMEX(T_int, T_1, T_star, KT, thC, trC, mC, tparams, corethermalparams, N_GC, dm, process, Tcore_1, a22); //ADI-intermediate temperature (r-direction)
         T_BoundaryConditions(T_int, q, Tcore_1, trC, mC, tparams, dm, N_GC, process);
         Compute_T_IMEX(T_2, T_int, T_1, thC, trC, mC, process, N_GC, dm, a22); //ADI-final temperature (theta-direction)
         Tcore_2 = TCoreEvolveImplicit(T_1, Tcore_1, Tcore_star, trC, mC, N_GC, dm, process, corethermalparams, a22);
-        // Compute_KT_IMEX(KT, T_1, q, J, phE, cE, q_SH, trC, thC, mC, tparams, N_GC, dm, process);
-        // Compute_Tstar_IMEX(T_star, T, T_1, q, J, phE, cE, q_SH, thC, trC, mC, tparams, N_GC, dm, process, a21); //IMEX-intermediate temperature
-        // Tcore_star = TCore_starEvolve(T, tparams.Tcore, trC, mC, N_GC, dm, process, corethermalparams, a21); //IMEX-intermediate core temperature
-        // Tcore_2 = TCoreEvolveImplicit(T_1, Tcore_1, Tcore_star, trC, mC, N_GC, dm, process, corethermalparams, a22);
-        // Compute_Tint_IMEX(T_int, T_1, T_star, KT, thC, trC, mC, tparams, corethermalparams, N_GC, dm, process, Tcore_2, a22); //ADI-intermediate temperature (r-direction)
-        // T_BoundaryConditions(T_int, q, Tcore_2, trC, mC, tparams, dm, N_GC, process);
-        // Compute_T_IMEX(T_2, T_int, T_1, thC, trC, mC, process, N_GC, dm, a22); //ADI-final temperature (theta-direction)
-
-//        T_BoundaryConditions(T_2, q, Tcore_2, trC, mC, tparams, dm, N_GC, process);
 
         for(size_t i=N_GC-1; i<B.shape()[1]-(N_GC-1); i++){
             for(size_t j=N_GC-1; j<B.shape()[2]-(N_GC-1); j++){
@@ -1448,13 +1394,12 @@ void RK_Step(VectorField & B, ScalarField & T, VectorField & phE, VectorField & 
 
         if(dm.InitiallyEquatoriallySymmetric == true){
             B_Symmetrize(B_np1, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, dm);
-            // MPI_Barrier( MPI_COMM_WORLD );
         }
         B_BoundaryConditions(B_np1, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, dm);
+        T_BoundaryConditions(T_np1, q, tparams.Tcore, trC, mC, tparams, dm, N_GC, process);
         if(dm.InitiallyEquatoriallySymmetric == true) B_Symmetrize(B_np1, bparams, Ntheta, N_GC, process, Ntheta_locs, starts, dm);
         if(trC.conductivity_anisotropy == true) Bmag_and_BhatCalc(B_np1, mC, trC.eta_H, trC.eta_O_perp, trC.max_eta_local, dm, N_GC, process);
         else Bmag_and_BhatCalc(B_np1, mC, trC.eta_H, trC.eta_O, trC.max_eta_local, dm, N_GC, process);
-        T_BoundaryConditions(T_np1, q, tparams.Tcore, trC, mC, tparams, dm, N_GC, process);
         exchng2Vector(B_np1, N_GC, process, dm.stridetype_Vec);
         exchng2Scalar(T_np1, N_GC, process, dm.stridetype_Sca);
     }
