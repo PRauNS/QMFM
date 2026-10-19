@@ -9,7 +9,7 @@
   <img alt="DOI" src="https://zenodo.org/badge/DOI/10.5281/zenodo.23464487.svg" alt="DOI">
   </a>
   <a href="https://www.gnu.org/licenses/gpl-3.0.en.html">
-    <img alt="License" src="https://img.shields.io/github/license/USERNAME/REPOSITORY">
+    <img alt="License" src="https://img.shields.io/github/license/PRauNS/QMFM">
   </a>
 </p>
 
