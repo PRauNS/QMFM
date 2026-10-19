@@ -5,11 +5,15 @@
 
 <!-- Information badges -->
 <p align="center">
-    <a href="https://doi.org/10.5281/zenodo.23464487">
-  <img alt="DOI" src="https://zenodo.org/badge/DOI/10.5281/zenodo.23464487.svg">
+  <a href="https://doi.org/10.5281/zenodo.23464487"
+     style="text-decoration: none;">
+    <img alt="DOI"
+         src="https://zenodo.org/badge/DOI/10.5281/zenodo.23464487.svg">
   </a>
-  <a href="https://www.gnu.org/licenses/gpl-3.0.en.html">
-    <img alt="License" src="https://img.shields.io/github/license/PRauNS/QMFM">
+  <a href="https://www.gnu.org/licenses/gpl-3.0.en.html"
+     style="text-decoration: none;">
+    <img alt="License"
+         src="https://img.shields.io/github/license/PRauNS/QMFM">
   </a>
 </p>
 
