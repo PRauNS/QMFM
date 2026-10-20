@@ -3,6 +3,20 @@
   Quantizing Magnetic Fields in Magnetars (QMFM)
 </h1>
 
+<!-- Information badges -->
+<p align="center">
+  <a href="https://doi.org/10.5281/zenodo.23464487"
+     style="text-decoration: none;">
+    <img alt="DOI"
+         src="https://zenodo.org/badge/DOI/10.5281/zenodo.23464487.svg">
+  </a>
+  <a href="https://www.gnu.org/licenses/gpl-3.0.en.html"
+     style="text-decoration: none;">
+    <img alt="License"
+         src="https://img.shields.io/github/license/PRauNS/QMFM">
+  </a>
+</p>
+
 <!-- Description -->
 QMFM is a finite volume code for studying magnetothermal evolution in neutron star crusts, and includes the effects of Landau quantization on thermodynamic quantities and transport coefficients. It is written in C++ and parallelized with MPI. The code was introduced, and is described in further detail, in [this paper](https://arxiv.org/abs/2609.24918).
 
